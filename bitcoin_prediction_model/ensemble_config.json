@@ -1,0 +1,22 @@
+{
+    "gru_weight": 0.00954,
+    "lr_weight": 0.98992,
+    "xgb_weight": 0.00054,
+    "optimal_threshold": 0.3,
+    "feature_columns": [
+        "sent_q2_flag_x_Close_to_SMA10",
+        "BTC_GLD_corr_5d",
+        "BTC_Nasdaq_beta_10d",
+        "BTC_Nasdaq_corr_5d",
+        "sent_vol",
+        "sent_cross_up_x_high_low_range",
+        "sent_q5_flag",
+        "ROC_1d",
+        "ROC_3d",
+        "sent_5d",
+        "volume_change_1d",
+        "sent_neg_x_high_low_range",
+        "high_low_range",
+        "sent_accel"
+    ]
+}
