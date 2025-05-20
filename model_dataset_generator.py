@@ -62,7 +62,7 @@ def fetch_data_from_supabase(update_only=False):
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
         
         # If update_only is True, get the most recent date in model_features
-        date_filter = None
+        latest_date = None
         if update_only:
             logger.info("Update only mode: Determining latest data date...")
             model_response = supabase.table("model_features").select("date").order('date', desc=True).limit(1).execute()
@@ -70,9 +70,6 @@ def fetch_data_from_supabase(update_only=False):
             if model_response.data and len(model_response.data) > 0:
                 latest_date = model_response.data[0]['date']
                 logger.info(f"Most recent date in model_features: {latest_date}")
-                
-                # Only fetch newer data than what we already have
-                date_filter = f"date > '{latest_date}'"
                 logger.info(f"Will only fetch data newer than {latest_date}")
                 
                 # If there's no newer data, check if we have tomorrow's prediction
@@ -95,15 +92,20 @@ def fetch_data_from_supabase(update_only=False):
         logger.info("Fetching required market data columns...")
         market_query = supabase.table("market_data").select(",".join(market_columns))
         
-        if date_filter:
-            market_query = market_query.filter(date_filter)
+        # Apply the date filter if latest_date is available
+        if latest_date:
+            # Use the correct filter syntax for your Supabase client version
+            # For newer versions (>=1.0.0), use:
+            market_query = market_query.filter("date", "gt", latest_date)
+            # For older versions, you might need:
+            # market_query = market_query.gt("date", latest_date)
             
         market_response = market_query.execute()
         market_df = pd.DataFrame(market_response.data)
         
         if market_df.empty and update_only:
             logger.info("No new market data found after the latest model feature date.")
-            return market_df, pd.DataFrame()
+            return pd.DataFrame(), pd.DataFrame()
             
         logger.info(f"Retrieved {len(market_df)} rows from market_data")
         
@@ -111,8 +113,12 @@ def fetch_data_from_supabase(update_only=False):
         logger.info("Fetching mean_sentiment from news_sentiment...")
         sentiment_query = supabase.table("news_sentiment").select("date,mean_sentiment")
         
-        if date_filter:
-            sentiment_query = sentiment_query.filter(date_filter)
+        if latest_date:
+            # Use the correct filter syntax for your Supabase client version
+            # For newer versions (>=1.0.0), use:
+            sentiment_query = sentiment_query.filter("date", "gt", latest_date)
+            # For older versions, you might need:
+            # sentiment_query = sentiment_query.gt("date", latest_date)
             
         sentiment_response = sentiment_query.execute()
         sentiment_df = pd.DataFrame(sentiment_response.data)
@@ -122,19 +128,12 @@ def fetch_data_from_supabase(update_only=False):
             
         logger.info(f"Retrieved {len(sentiment_df)} rows from news_sentiment")
         
-        # Handle case where one of the dataframes is empty but not the other
-        if market_df.empty and not sentiment_df.empty:
-            logger.warning("Retrieved sentiment data but no market data. Cannot proceed.")
-            return pd.DataFrame(), pd.DataFrame()
-            
-        if not market_df.empty and sentiment_df.empty:
-            logger.warning("Retrieved market data but no sentiment data. Cannot proceed.")
-            return pd.DataFrame(), pd.DataFrame()
-        
         return market_df, sentiment_df
         
     except Exception as e:
         logger.error(f"Error fetching data from Supabase: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())  # Add this to get the full traceback
         return None, None
 
 
@@ -374,19 +373,20 @@ def main():
     args = parser.parse_args()
     
     logger.info("Starting model dataset generation")
-    
+        
     try:
         # Fetch data from Supabase, passing the update_only flag
         market_df, sentiment_df = fetch_data_from_supabase(update_only=args.update_only)
         
+        # Check if dataframes are None (error occurred)
+        if market_df is None or sentiment_df is None:
+            logger.error("Could not fetch data from Supabase")
+            return 1
+            
         # If both dataframes are empty, there's no new data to process
         if market_df.empty and sentiment_df.empty:
             logger.info("No new data to process. Exiting.")
             return 0
-        
-        if market_df is None or sentiment_df is None:
-            logger.error("Could not fetch data from Supabase")
-            return 1
         
         # Create model features
         model_df = create_model_features(market_df, sentiment_df)
