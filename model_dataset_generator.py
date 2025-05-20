@@ -167,8 +167,22 @@ def create_model_features(market_df, sentiment_df):
         # Calculate sentiment-based features
         logger.info("Calculating sentiment features...")
         
-        # 7. sent_q5_flag
-        df['sent_q'] = pd.qcut(df['mean_sentiment'], 5, labels=False)
+        # Check if we have at least 5 different sentiment values for qcut
+        unique_sentiments = df['mean_sentiment'].nunique()
+        
+        # 7. sent_q5_flag and sent_q2_flag
+        if unique_sentiments >= 5:
+            # If we have at least 5 unique values, use qcut normally
+            df['sent_q'] = pd.qcut(df['mean_sentiment'], 5, labels=False)
+        elif unique_sentiments > 1:
+            # If we have more than 1 but less than 5, use fewer bins
+            df['sent_q'] = pd.qcut(df['mean_sentiment'], min(unique_sentiments, 5), labels=False, duplicates='drop')
+        else:
+            # If we have only 1 unique value, just assign middle value (2) to all
+            logger.warning("Only one unique sentiment value found. Using constant quantile value.")
+            df['sent_q'] = 2
+        
+        # Now create the flags regardless of how sent_q was created
         df['sent_q2_flag'] = (df['sent_q'] == 1).astype(int)
         df['sent_q5_flag'] = (df['sent_q'] == 4).astype(int)
         
@@ -237,6 +251,8 @@ def create_model_features(market_df, sentiment_df):
         
     except Exception as e:
         logger.error(f"Error creating model features: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())  # Add full traceback for debugging
         return None
 
 
