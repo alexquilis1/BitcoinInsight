@@ -100,7 +100,15 @@ def fetch_gnews(date: datetime, max_articles=10):
     response = make_request_with_retry(url)
     if response and response.status_code == 200:
         articles = response.json().get("articles", [])
-        return [(a.get("url"), a.get("title")) for a in articles]
+        result = []
+        for a in articles:
+            result.append({
+                "url": a.get("url"),
+                "title": a.get("title"),
+                "source": a.get("source", {}).get("name", ""),
+                "description": a.get("description", "")
+            })
+        return result
     return []
 
 
@@ -113,7 +121,15 @@ def fetch_thenewsapi(date: datetime, max_articles=3):
     response = make_request_with_retry(url)
     if response and response.status_code == 200:
         articles = response.json().get("data", [])
-        return [(a.get("url"), a.get("title")) for a in articles]
+        result = []
+        for a in articles:
+            result.append({
+                "url": a.get("url"),
+                "title": a.get("title"),
+                "source": a.get("source", ""),
+                "description": a.get("description", "")
+            })
+        return result
     return []
 
 
@@ -122,25 +138,45 @@ def collect_articles(start_date: datetime, end_date: datetime):
     current = start_date
     while current <= end_date:
         logger.info(f"Fetching articles for {current}")
-        urls_titles = []
-        urls_titles += fetch_gnews(current)
-        urls_titles += fetch_thenewsapi(current)
-
-        # Scrape contents
-        article_texts = []
-        for url, _title in urls_titles:
-            content = extract_article_content(url)
-            if content:
-                article_texts.append(content)
+        
+        # Get articles from both sources
+        gnews_articles = fetch_gnews(current)
+        thenews_articles = fetch_thenewsapi(current)
+        all_articles = gnews_articles + thenews_articles
+        
+        # Scrape content and organize data
+        titles = []
+        urls = []
+        sources = []
+        descriptions = []
+        article_contents = []
+        
+        for article in all_articles:
+            url = article.get("url")
+            title = article.get("title", "")
+            source = article.get("source", "")
+            description = article.get("description", "")
+            
+            if url:
+                content = extract_article_content(url)
+                if content:
+                    titles.append(title)
+                    urls.append(url)
+                    sources.append(source)
+                    descriptions.append(description)
+                    article_contents.append(content)
 
         all_data.append({
             "date": current.strftime("%Y-%m-%d"),
-            "articles": article_texts
+            "titles": titles,
+            "urls": urls,
+            "sources": sources,
+            "descriptions": descriptions,
+            "article_contents": article_contents
         })
         current += timedelta(days=1)
 
     df = pd.DataFrame(all_data)
-    df["articles"] = df["articles"].apply(lambda lst: lst if isinstance(lst, list) else [])
     return df
 
 
@@ -166,24 +202,49 @@ def compute_sentiment(texts: List[str], tokenizer, model):
 
 
 def add_sentiment_scores(df: pd.DataFrame, tokenizer, model):
-    df["mean_sentiment"] = df["articles"].apply(lambda texts: compute_sentiment(texts, tokenizer, model))
+    df["mean_sentiment"] = df["article_contents"].apply(lambda texts: compute_sentiment(texts, tokenizer, model))
     return df
 
 
 def save_to_supabase(df: pd.DataFrame, url: str, key: str, table_name="news_sentiment"):
     from supabase import create_client
     supabase = create_client(url, key)
+    
+    success_count = 0
+    error_count = 0
+    
     for _, row in df.iterrows():
-        record = {
-            "date": row["date"],
-            "mean_sentiment": row["mean_sentiment"],
-        }
-        exists = supabase.table(table_name).select("id").eq("date", row["date"]).execute()
-        if exists.data:
-            supabase.table(table_name).update(record).eq("id", exists.data[0]['id']).execute()
-        else:
-            supabase.table(table_name).insert(record).execute()
-    logger.info(f"Saved {len(df)} rows to Supabase.")
+        try:
+            record = {
+                "date": row["date"],
+                "titles": json.dumps(row["titles"]) if row["titles"] else None,
+                "urls": json.dumps(row["urls"]) if row["urls"] else None,
+                "sources": json.dumps(row["sources"]) if row["sources"] else None,
+                "descriptions": json.dumps(row["descriptions"]) if row["descriptions"] else None,
+                "article_contents": json.dumps(row["article_contents"]) if row["article_contents"] else None,
+                "mean_sentiment": row["mean_sentiment"] if pd.notna(row["mean_sentiment"]) else None,
+            }
+            
+            # Skip rows with no articles
+            if not row["article_contents"] or len(row["article_contents"]) == 0:
+                logger.warning(f"Skipping date {record['date']} - no articles found")
+                continue
+                
+            exists = supabase.table(table_name).select("id").eq("date", row["date"]).execute()
+            if exists.data:
+                supabase.table(table_name).update(record).eq("id", exists.data[0]['id']).execute()
+                success_count += 1
+                logger.info(f"Updated existing record for {row['date']}")
+            else:
+                supabase.table(table_name).insert(record).execute()
+                success_count += 1
+                logger.info(f"Inserted new record for {row['date']}")
+                
+        except Exception as e:
+            logger.error(f"Failed to save record for date {row['date']}: {e}")
+            error_count += 1
+    
+    logger.info(f"Saved {success_count} rows to Supabase. Errors: {error_count}")
 
 
 def main():

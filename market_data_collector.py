@@ -175,10 +175,17 @@ def process_data(raw_data):
         else:
             logger.warning(f"Column {col} missing or all NaN, skipping")
     
-    # Rename columns to match expected names in model_dataset_generator.py
+    # Rename columns to match the exact database schema
     column_mapping = {
         "Close": "btc_close",
-        "Close_to_SMA10": "close_to_sma10_ratio"
+        "High": "btc_high", 
+        "Low": "btc_low",
+        "Volume": "btc_volume",
+        "NASDAQ": "nasdaq_close",
+        "SMA10": "btc_sma10",
+        "Close_to_SMA10": "close_to_sma10_ratio",
+        "BTC_NASDAQ_corr_5d": "btc_nasdaq_corr_5d",
+        "BTC_NASDAQ_beta_10d": "btc_nasdaq_beta_10d"
     }
     
     result_df = btc[available_cols].copy()
