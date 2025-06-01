@@ -1,5 +1,4 @@
-# btc_prediction_api.py
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 import subprocess
 import os
@@ -8,6 +7,11 @@ import logging
 from typing import Optional, Dict, List, Any, Union
 from pydantic import BaseModel
 from supabase import create_client
+import httpx
+import websockets
+import json
+import time
+
 
 # Set up logging
 logging.basicConfig(
@@ -78,7 +82,7 @@ app = FastAPI(
 # Configure CORS to allow requests from your frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Your NextJS frontend URL
+    allow_origins=["*", "localhost:5173"],  # Your NextJS frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -87,6 +91,12 @@ app.add_middleware(
 # Initialize Supabase client
 SUPABASE_URL = 'https://djxbfvtmkwshkhmltbby.supabase.co'
 SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqeGJmdnRta3dzaGtobWx0YmJ5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzU1MTUxOSwiZXhwIjoyMDYzMTI3NTE5fQ.oc7xogdOaoNZJ2aYyM610PuoUqMyVuCONqbsatmbp_Q'
+
+# REST endpoint base for Coinbase Pro (Exchange)
+COINBASE_REST = os.getenv("COINBASE_REST_URL", "https://api.exchange.coinbase.com")
+
+# WebSocket rate limiter
+_last_trade_ts: float = 0.0
 
 supabase = None
 try:
@@ -258,9 +268,9 @@ async def generate_prediction(background_tasks: BackgroundTasks):
     def run_prediction_script():
         """Function to run in the background"""
         try:
-            logger.info("Starting prediction script")
+            logger.info("Starting prediction workflow script")
             result = subprocess.run(
-                ["python", "scripts/make_prediction.py"], 
+                ["python", "run_workflow.py"], 
                 capture_output=True, 
                 text=True
             )
@@ -281,6 +291,62 @@ async def generate_prediction(background_tasks: BackgroundTasks):
         "message": "Prediction generation started",
         "status": "processing"
     }
+    
+# --- Bitcoin Data Endpoints ---
+@app.get("/api/bitcoin/realtime", tags=["Bitcoin"])
+async def btc_realtime():
+    """Market ticker from Coinbase Pro"""
+    url = f"{COINBASE_REST}/products/BTC-USD/ticker"
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Error fetching realtime data")
+    data = resp.json()
+    # data contains price, time, bid, ask, volume_24h, etc.
+    return {
+        "price": float(data.get("price", 0)),
+        "time": data.get("time"),
+        "volume_24h": float(data.get("volume", 0)),
+        "bid": float(data.get("bid", 0)),
+        "ask": float(data.get("ask", 0)),
+    }
+
+@app.get("/api/bitcoin/historical", tags=["Bitcoin"])
+async def btc_historical(granularity: int = 86400, start: Optional[str] = None, end: Optional[str] = None):
+    """Historic candles for BTC-USD: granularity in seconds (86400=1d, 3600=1h, etc.)"""
+    url = f"{COINBASE_REST}/products/BTC-USD/candles"
+    params: Dict[str, Any] = {"granularity": granularity}
+    if start: params["start"] = start
+    if end: params["end"] = end
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, params=params)
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Error fetching historical candles")
+    candles = resp.json()
+    # Coinbase returns list of [time, low, high, open, close, volume]
+    return [
+        {"time": item[0], "low": item[1], "high": item[2], "open": item[3], "close": item[4], "volume": item[5]}
+        for item in candles
+    ]
+
+@app.websocket("/ws/bitcoin/coinbase")
+async def websocket_coinbase(ws: WebSocket):
+    await ws.accept()
+    global _last_trade_ts
+    uri = "wss://advanced-trade-ws.coinbase.com"
+    subscribe_msg = {"type": "subscribe", "channel": "market_trades", "product_ids": ["BTC-USD"]}
+    async with websockets.connect(uri) as sock:
+        await sock.send(json.dumps(subscribe_msg))
+        while True:
+            msg = await sock.recv()
+            data = json.loads(msg)
+            if data.get('type') in ('market_trades', 'trade'):
+                now = time.time()
+                if now - _last_trade_ts < 1:
+                    continue
+                _last_trade_ts = now
+                price = float(data.get('price', 0))
+                await ws.send_json({"timestamp": int(now), "price": price})
 
 @app.get(
     "/api/system/status", 

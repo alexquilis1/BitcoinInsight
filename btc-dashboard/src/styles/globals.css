@@ -1,0 +1,194 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fuente personalizada */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* Estilos base */
+@layer base {
+    body {
+        @apply bg-gray-900 text-white;
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* ✅ NUEVO: Protección global contra overflow horizontal */
+    * {
+        min-width: 0;
+        word-wrap: break-word;
+    }
+
+    html, body {
+        overflow-x: hidden;
+        width: 100%;
+    }
+}
+
+/* Componentes personalizados */
+@layer components {
+    .card {
+        @apply bg-gray-800 rounded-lg border border-gray-700 shadow-xl;
+    }
+
+    .card-gradient {
+        @apply bg-gradient-to-br from-gray-800/90 to-gray-900/90 backdrop-blur-sm;
+    }
+
+    .btn-primary {
+        @apply bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors;
+    }
+
+    .btn-secondary {
+        @apply bg-gray-700 hover:bg-gray-600 text-gray-200 font-medium py-2 px-4 rounded-lg transition-colors;
+    }
+
+    .text-gradient {
+        @apply bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent;
+    }
+
+    /* ✅ NUEVO: Clases responsive útiles */
+    .responsive-container {
+        @apply w-full min-w-0 overflow-hidden;
+    }
+
+    .responsive-text {
+        @apply break-words overflow-wrap-anywhere;
+    }
+
+    .responsive-grid {
+        @apply grid gap-4 md:gap-6;
+    }
+
+    /* Scrollbar personalizada */
+    .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+        @apply bg-gray-900;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        @apply bg-gray-600 rounded-full;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        @apply bg-gray-500;
+    }
+}
+
+/* Animaciones personalizadas */
+@keyframes pulse-slow {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.8;
+    }
+}
+
+.animate-pulse-slow {
+    animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ✅ ARREGLADO: Estilos para gráficos responsive */
+.chart-container {
+    position: relative;
+    width: 100% !important;
+    height: 100% !important;
+    /* ❌ QUITADO: height: 400px; - interferían con responsive */
+}
+
+/* ✅ NUEVO: Asegurar que Chart.js sea responsive */
+canvas {
+    max-width: 100% !important;
+    height: auto !important;
+}
+
+/* Mejoras visuales para elementos interactivos */
+button:focus {
+    outline: none;
+}
+
+button:focus-visible {
+    @apply ring-2 ring-blue-500 ring-offset-2 ring-offset-gray-900;
+}
+
+select:focus {
+    outline: none;
+}
+
+/* ✅ NUEVO: Mejorar botones en móvil */
+@media (max-width: 768px) {
+    button {
+        min-height: 44px; /* Mejor para touch */
+        min-width: 44px;
+    }
+}
+
+/* Gradientes personalizados */
+.gradient-bg-blue {
+    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+}
+
+.gradient-bg-orange {
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+}
+
+.gradient-bg-green {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.gradient-bg-red {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+/* Efectos de hover mejorados */
+.hover-lift {
+    transition: transform 0.2s ease-in-out;
+}
+
+.hover-lift:hover {
+    transform: translateY(-2px);
+}
+
+/* Estados de loading */
+.loading-shimmer {
+    background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/* ✅ NUEVO: Mejoras responsive adicionales */
+@layer utilities {
+    /* Truncar texto largo */
+    .text-truncate-responsive {
+        @apply truncate md:text-clip;
+    }
+
+    /* Espaciado responsive */
+    .space-responsive {
+        @apply space-y-3 md:space-y-4 lg:space-y-6;
+    }
+
+    /* Padding responsive */
+    .p-responsive {
+        @apply p-4 md:p-6 lg:p-8;
+    }
+}
+
+/* ✅ NUEVO: Debug temporal (comentar cuando no necesites) */
+/*
+* {
+    outline: 1px solid red !important;
+}
+*/

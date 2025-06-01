@@ -1,0 +1,15 @@
+[
+  "btc_nasdaq_beta_10d",
+  "sent_q5_flag",
+  "roc_1d",
+  "high_low_range",
+  "roc_3d",
+  "sent_5d",
+  "sent_cross_up_x_high_low_range",
+  "btc_nasdaq_corr_5d",
+  "bb_width",
+  "sent_accel",
+  "sent_vol",
+  "sent_neg_x_high_low_range",
+  "sent_q2_flag_x_close_to_sma10"
+]

@@ -1,0 +1,87 @@
+2025-06-01 00:46:57,332 - INFO - 🚀 Starting Bitcoin prediction workflow at 2025-06-01 00:46:57
+2025-06-01 00:46:57,333 - INFO - ▶️ Starting Market data collection at 2025-06-01 00:46:57
+2025-06-01 00:47:00,729 - ERROR - ❌ Market data collection failed with error code 1
+2025-06-01 00:47:00,730 - ERROR - Error output: Traceback (most recent call last):
+  File "C:\Users\User\Documents\tfg\market_data_collector.py", line 32, in <module>
+    import yfinance as yf
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\__init__.py", line 25, in <module>
+    from .ticker import Ticker
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\ticker.py", line 29, in <module>
+    from .base import TickerBase
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\base.py", line 37, in <module>
+    from .live import WebSocket
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\live.py", line 7, in <module>
+    from websockets.asyncio.client import connect as async_connect
+ModuleNotFoundError: No module named 'websockets.asyncio'
+
+2025-06-01 00:47:00,730 - ERROR - 🛑 Workflow failed at step 1: Market data collection
+2025-06-01 00:47:00,730 - INFO - 
+==================================================
+2025-06-01 00:47:00,730 - INFO - 📊 WORKFLOW EXECUTION SUMMARY
+2025-06-01 00:47:00,731 - INFO - ==================================================
+2025-06-01 00:47:00,731 - INFO - Started: 2025-06-01 00:46:57
+2025-06-01 00:47:00,731 - INFO - Ended:   2025-06-01 00:47:00
+2025-06-01 00:47:00,731 - INFO - Total Duration: 0:00:03
+2025-06-01 00:47:00,731 - INFO - --------------------------------------------------
+2025-06-01 00:47:00,731 - INFO - Step Breakdown:
+2025-06-01 00:47:00,732 - INFO -   1. Market data collection: ❌ FAILED - 0:00:03
+2025-06-01 00:47:00,732 - INFO - --------------------------------------------------
+2025-06-01 00:47:00,732 - ERROR - ❌ Bitcoin prediction workflow completed with errors
+2025-06-01 01:06:43,788 - INFO - 🚀 Starting Bitcoin prediction workflow at 2025-06-01 01:06:43
+2025-06-01 01:06:43,788 - INFO - ▶️ Starting Market data collection at 2025-06-01 01:06:43
+2025-06-01 01:06:44,870 - ERROR - ❌ Market data collection failed with error code 1
+2025-06-01 01:06:44,870 - ERROR - Error output: Traceback (most recent call last):
+  File "C:\Users\User\Documents\tfg\market_data_collector.py", line 32, in <module>
+    import yfinance as yf
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\__init__.py", line 25, in <module>
+    from .ticker import Ticker
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\ticker.py", line 29, in <module>
+    from .base import TickerBase
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\base.py", line 37, in <module>
+    from .live import WebSocket
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\live.py", line 7, in <module>
+    from websockets.asyncio.client import connect as async_connect
+ModuleNotFoundError: No module named 'websockets.asyncio'
+
+2025-06-01 01:06:44,870 - ERROR - 🛑 Workflow failed at step 1: Market data collection
+2025-06-01 01:06:44,870 - INFO - 
+==================================================
+2025-06-01 01:06:44,870 - INFO - 📊 WORKFLOW EXECUTION SUMMARY
+2025-06-01 01:06:44,870 - INFO - ==================================================
+2025-06-01 01:06:44,870 - INFO - Started: 2025-06-01 01:06:43
+2025-06-01 01:06:44,870 - INFO - Ended:   2025-06-01 01:06:44
+2025-06-01 01:06:44,871 - INFO - Total Duration: 0:00:01
+2025-06-01 01:06:44,871 - INFO - --------------------------------------------------
+2025-06-01 01:06:44,871 - INFO - Step Breakdown:
+2025-06-01 01:06:44,871 - INFO -   1. Market data collection: ❌ FAILED - 0:00:01
+2025-06-01 01:06:44,871 - INFO - --------------------------------------------------
+2025-06-01 01:06:44,871 - ERROR - ❌ Bitcoin prediction workflow completed with errors
+2025-06-01 20:15:46,466 - INFO - 🚀 Starting Bitcoin prediction workflow at 2025-06-01 20:15:46
+2025-06-01 20:15:46,466 - INFO - ▶️ Starting Market data collection at 2025-06-01 20:15:46
+2025-06-01 20:15:49,905 - ERROR - ❌ Market data collection failed with error code 1
+2025-06-01 20:15:49,906 - ERROR - Error output: Traceback (most recent call last):
+  File "C:\Users\User\Documents\tfg\market_data_collector.py", line 32, in <module>
+    import yfinance as yf
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\__init__.py", line 25, in <module>
+    from .ticker import Ticker
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\ticker.py", line 29, in <module>
+    from .base import TickerBase
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\base.py", line 37, in <module>
+    from .live import WebSocket
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\site-packages\yfinance\live.py", line 7, in <module>
+    from websockets.asyncio.client import connect as async_connect
+ModuleNotFoundError: No module named 'websockets.asyncio'
+
+2025-06-01 20:15:49,907 - ERROR - 🛑 Workflow failed at step 1: Market data collection
+2025-06-01 20:15:49,907 - INFO - 
+==================================================
+2025-06-01 20:15:49,908 - INFO - 📊 WORKFLOW EXECUTION SUMMARY
+2025-06-01 20:15:49,908 - INFO - ==================================================
+2025-06-01 20:15:49,908 - INFO - Started: 2025-06-01 20:15:46
+2025-06-01 20:15:49,908 - INFO - Ended:   2025-06-01 20:15:49
+2025-06-01 20:15:49,909 - INFO - Total Duration: 0:00:03
+2025-06-01 20:15:49,909 - INFO - --------------------------------------------------
+2025-06-01 20:15:49,909 - INFO - Step Breakdown:
+2025-06-01 20:15:49,909 - INFO -   1. Market data collection: ❌ FAILED - 0:00:03
+2025-06-01 20:15:49,909 - INFO - --------------------------------------------------
+2025-06-01 20:15:49,909 - ERROR - ❌ Bitcoin prediction workflow completed with errors
