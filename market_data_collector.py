@@ -43,8 +43,8 @@ except FileNotFoundError:
     SUPABASE_URL = os.environ.get("SUPABASE_URL")
     SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-TICKERS         = ["BTC-USD", "^IXIC", "GLD"]
-LOOKBACK_BUFFER = 10  # Buffer days to ensure rolling windows can compute fully
+TICKERS         = ["BTC-USD", "^IXIC"]  # Removed GLD since btc_gld_corr_5d is not needed
+LOOKBACK_BUFFER = 25  # Increased buffer for 20-day Bollinger Bands calculation
 
 
 def fetch_market_data(tickers, start_date, end_date):
@@ -93,16 +93,6 @@ def process_data(raw_data):
         btc["NASDAQ"] = pd.Series(np.nan, index=btc.index)
         logger.warning("NASDAQ data missing; will skip correlation/beta calculations")
 
-    # Merge GLD close
-    if "GLD" in raw_data and not raw_data["GLD"].empty:
-        gld = raw_data["GLD"].copy()
-        gld.index = pd.to_datetime(gld.index)
-        gld_close = gld["Close"].squeeze()  # Ensure Series
-        btc["GLD"] = gld_close.reindex(btc.index).interpolate(method="linear")
-    else:
-        btc["GLD"] = pd.Series(np.nan, index=btc.index)
-        logger.warning("GLD data missing; will skip correlation/beta calculations")
-
     # Ensure all main columns are clean Series
     btc["Close"] = btc_close
     btc["High"] = btc_high
@@ -122,19 +112,25 @@ def process_data(raw_data):
     btc["ROC_1d"] = btc_close.pct_change(periods=1) * 100
     btc["ROC_3d"] = btc_close.pct_change(periods=3) * 100
 
-    # 4. volume_change
+    # 4. Bollinger Bands width (bb_width) - 20-day window
+    sma20 = btc_close.rolling(window=20).mean()
+    std20 = btc_close.rolling(window=20).std()
+    bb_upper = sma20 + (2 * std20)
+    bb_lower = sma20 - (2 * std20)
+    btc["bb_width"] = (bb_upper - bb_lower) / sma20
+
+    # 5. volume_change (keeping for completeness)
     if not btc_volume.isna().all():
         btc["volume_change_1d"] = btc_volume.pct_change()
     else:
         btc["volume_change_1d"] = pd.Series(np.nan, index=btc.index)
         logger.warning("Volume data unavailable; skipping volume_change_1d")
 
-    # 5–7. Cross-asset correlation/beta
+    # 6. Cross-asset correlation/beta with NASDAQ only
     btc_return = btc_close.pct_change()
     btc["BTC_return"] = btc_return
     
     nasdaq_series = btc["NASDAQ"].squeeze() if "NASDAQ" in btc.columns else pd.Series(np.nan, index=btc.index)
-    gld_series = btc["GLD"].squeeze() if "GLD" in btc.columns else pd.Series(np.nan, index=btc.index)
     
     if not nasdaq_series.isna().all():
         nasdaq_return = nasdaq_series.pct_change()
@@ -143,18 +139,8 @@ def process_data(raw_data):
         nasdaq_return = pd.Series(np.nan, index=btc.index)
         btc["NASDAQ_return"] = nasdaq_return
 
-    if not gld_series.isna().all():
-        gld_return = gld_series.pct_change()
-        btc["GLD_return"] = gld_return
-    else:
-        gld_return = pd.Series(np.nan, index=btc.index)
-        btc["GLD_return"] = gld_return
-
-    # 5. BTC-GLD corr (5-day)
-    btc["BTC_GLD_corr_5d"] = btc_return.rolling(5).corr(gld_return)
-    # 6. BTC-NASDAQ corr (5-day)
+    # BTC-NASDAQ correlation (5-day) and beta (10-day)
     btc["BTC_NASDAQ_corr_5d"] = btc_return.rolling(5).corr(nasdaq_return)
-    # 7. BTC-NASDAQ beta (10-day)
     nas_var = nasdaq_return.rolling(10).var()
     cov = btc_return.rolling(10).cov(nasdaq_return)
     btc["BTC_NASDAQ_beta_10d"] = cov / nas_var
@@ -162,22 +148,43 @@ def process_data(raw_data):
     # Add date column for easy uploading
     btc["date"] = btc.index.strftime("%Y-%m-%d")
 
-    # Final columns of interest - match the expected column names from model_dataset_generator.py
-    final_cols = [
-        "date", "Close", "High", "Low", "Open", "Volume",
-        "NASDAQ", "GLD", "SMA10", "Close_to_SMA10", "high_low_range",
-        "ROC_1d", "ROC_3d", "volume_change_1d",
-        "BTC_GLD_corr_5d", "BTC_NASDAQ_corr_5d", "BTC_NASDAQ_beta_10d"
+    # Only include essential columns needed for the exact model features
+    essential_cols = [
+        "date", 
+        "Close",                  # Will become btc_close
+        "High",                   # Needed for high_low_range calculation
+        "Low",                    # Needed for high_low_range calculation  
+        "Volume",                 # Needed for volume_change_1d
+        "NASDAQ",                 # Needed for correlation/beta
+        "SMA10",                  # Intermediate calculation
+        "Close_to_SMA10",         # Will become close_to_sma10_ratio
+        "high_low_range",         # Direct feature
+        "ROC_1d",                 # Direct feature  
+        "ROC_3d",                 # Direct feature
+        "bb_width",               # Direct feature
+        "volume_change_1d",       # Not in final features but keeping for compatibility
+        "BTC_NASDAQ_corr_5d",     # Direct feature
+        "BTC_NASDAQ_beta_10d"     # Direct feature
     ]
     
-    # Rename columns to match the expected names in model_dataset_generator.py
+    # Check which columns actually exist and have data
+    available_cols = ["date"]
+    for col in essential_cols[1:]:
+        if col in btc.columns and not btc[col].isna().all():
+            available_cols.append(col)
+        else:
+            logger.warning(f"Column {col} missing or all NaN, skipping")
+    
+    # Rename columns to match expected names in model_dataset_generator.py
     column_mapping = {
         "Close": "btc_close",
         "Close_to_SMA10": "close_to_sma10_ratio"
     }
     
-    result_df = btc[final_cols].copy()
+    result_df = btc[available_cols].copy()
     result_df = result_df.rename(columns=column_mapping)
+    
+    logger.info(f"Final columns being saved: {list(result_df.columns)}")
     
     return result_df.dropna()
 
@@ -189,24 +196,47 @@ def save_to_supabase(df: pd.DataFrame, url: str, key: str, table_name="market_da
     df = df.copy()
     df.reset_index(drop=True, inplace=True)
 
-    # Convert numeric types to native Python
+    # Convert numeric types to native Python and handle NaN/inf values
     for col in df.columns:
+        if col == "date":
+            continue
         if pd.api.types.is_float_dtype(df[col]):
+            # Replace inf/-inf with NaN, then convert to float
+            df[col] = df[col].replace([np.inf, -np.inf], np.nan)
             df[col] = df[col].astype(float)
         elif pd.api.types.is_integer_dtype(df[col]):
             df[col] = df[col].astype(int)
 
     records = df.to_dict(orient="records")
     logger.info(f"Saving {len(records)} records to Supabase...")
+    
+    # Log first record structure for debugging
+    if records:
+        logger.info(f"Sample record structure: {list(records[0].keys())}")
 
+    success_count = 0
+    error_count = 0
+    
     for record in records:
-        existing = supabase.table(table_name).select("id").eq("date", record["date"]).execute()
-        if existing.data:
-            supabase.table(table_name).update(record).eq("id", existing.data[0]["id"]).execute()
-        else:
-            supabase.table(table_name).insert(record).execute()
+        try:
+            # Remove any NaN values from the record
+            clean_record = {k: v for k, v in record.items() if pd.notna(v)}
+            
+            existing = supabase.table(table_name).select("id").eq("date", record["date"]).execute()
+            if existing.data:
+                supabase.table(table_name).update(clean_record).eq("id", existing.data[0]["id"]).execute()
+                success_count += 1
+            else:
+                supabase.table(table_name).insert(clean_record).execute()
+                success_count += 1
+        except Exception as e:
+            logger.error(f"Failed to save record for date {record.get('date', 'unknown')}: {e}")
+            error_count += 1
 
-    logger.info("Supabase upload complete.")
+    logger.info(f"Supabase upload complete. Success: {success_count}, Errors: {error_count}")
+    
+    if error_count > 0:
+        logger.warning(f"Some records failed to upload. Check your database schema matches the data structure.")
 
 
 def main():

@@ -2,7 +2,7 @@
 Model Dataset Generator (Production Version)
 
 This script loads raw market & sentiment data from Supabase,
-calculates exactly the 14 model features + target, and stores
+calculates exactly the 13 model features + target, and stores
 the final dataset back to Supabase for training & prediction.
 
 Usage:
@@ -57,12 +57,19 @@ def fetch_data(update_only=False):
             latest_date = datetime.strptime(res.data[0]["date"], "%Y-%m-%d").date()
             logger.info(f"Latest model_features date: {latest_date}")
 
-    # Market data columns
+    # Market data columns - updated to match exact feature requirements
     market_cols = [
-        "date", "btc_close", "btc_gld_corr_5d", "btc_nasdaq_corr_5d",
-        "btc_nasdaq_beta_10d", "roc_1d", "roc_3d", "volume_change_1d",
-        "high_low_range", "close_to_sma10_ratio"
+        "date", 
+        "btc_close", 
+        "btc_nasdaq_corr_5d",      # Direct feature
+        "btc_nasdaq_beta_10d",     # Direct feature
+        "roc_1d",                  # Direct feature
+        "roc_3d",                  # Direct feature
+        "high_low_range",          # Direct feature
+        "bb_width",                # Direct feature
+        "close_to_sma10_ratio"     # Needed for interaction feature
     ]
+    
     mq = client.table("market_data").select(",".join(market_cols))
     if latest_date:
         start_str = (latest_date - timedelta(days=SENTIMENT_BUFFER)).strftime("%Y-%m-%d")
@@ -90,7 +97,7 @@ def fetch_data(update_only=False):
 def create_features(market_df: pd.DataFrame, sentiment_df: pd.DataFrame):
     df = pd.merge(market_df, sentiment_df, on="date", how="inner").sort_values("date")
 
-    # Sentiment rolling windows
+    # Sentiment rolling windows and derived features
     df["sent_vol"]    = df["mean_sentiment"].rolling(5).std().fillna(0)
     df["sent_5d"]     = df["mean_sentiment"].rolling(5).mean().fillna(0)
     df["sent_3d"]     = df["mean_sentiment"].rolling(3).mean().fillna(0)
@@ -119,26 +126,27 @@ def create_features(market_df: pd.DataFrame, sentiment_df: pd.DataFrame):
     # Target: next-day price up or down
     df["target_nextday"] = (df["btc_close"].shift(-1) > df["btc_close"]).astype(int)
 
+    # Final features list - EXACTLY matching your specified features
     features = [
         "date",
-        "sent_q2_flag_x_close_to_sma10",  # 1
-        "btc_gld_corr_5d",                # 2
-        "btc_nasdaq_beta_10d",            # 3
-        "btc_nasdaq_corr_5d",             # 4
-        "sent_vol",                       # 5
-        "sent_cross_up_x_high_low_range", # 6
-        "sent_q5_flag",                   # 7
-        "roc_1d",                         # 8
-        "roc_3d",                         # 9
-        "sent_5d",                        # 10
-        "volume_change_1d",               # 11
-        "sent_neg_x_high_low_range",      # 12
-        "high_low_range",                 # 13
-        "sent_accel",                     # 14
-        "target_nextday"                  # Target
+        "btc_nasdaq_beta_10d",               # 1
+        "sent_q5_flag",                      # 2 
+        "roc_1d",                            # 3
+        "high_low_range",                    # 4
+        "roc_3d",                            # 5
+        "sent_5d",                           # 6
+        "sent_cross_up_x_high_low_range",    # 7
+        "btc_nasdaq_corr_5d",                # 8
+        "bb_width",                          # 9
+        "sent_accel",                        # 10
+        "sent_vol",                          # 11
+        "sent_neg_x_high_low_range",         # 12
+        "sent_q2_flag_x_close_to_sma10",     # 13
+        "target_nextday"                     # Target
     ]
+    
     df_final = df[features].dropna()
-    logger.info(f"✅ Created {len(df_final)} final model rows.")
+    logger.info(f"✅ Created {len(df_final)} final model rows with {len(features)-2} features.")
     return df_final
 
 
@@ -162,9 +170,18 @@ def save_to_supabase(df: pd.DataFrame):
     records = new_data.to_dict(orient="records")
 
     logger.info(f"🚀 Inserting {len(records)} new model rows...")
+    success_count = 0
+    error_count = 0
+    
     for rec in records:
-        client.table("model_features").insert(rec).execute()
-    logger.info("✅ Supabase upload completed.")
+        try:
+            client.table("model_features").insert(rec).execute()
+            success_count += 1
+        except Exception as e:
+            logger.error(f"Failed to insert record for date {rec.get('date', 'unknown')}: {e}")
+            error_count += 1
+    
+    logger.info(f"✅ Supabase upload completed. Success: {success_count}, Errors: {error_count}")
 
 
 def main():
