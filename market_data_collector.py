@@ -53,7 +53,7 @@ except FileNotFoundError:
     SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 # Constants
-TICKERS       = ["BTC-USD", "^IXIC", "GLD"]
+TICKERS         = ["BTC-USD", "^IXIC", "GLD"]
 LOOKBACK_BUFFER = 20  # Días extra para cálculos históricos
 
 
@@ -119,11 +119,11 @@ def process_market_data(data_dict):
         btc_data = pd.DataFrame(btc_data.values, index=btc_data.index, columns=flat_cols)
         mapping = {}
         for col in btc_data.columns:
-            if 'Close_BTC' in col:   mapping[col] = 'Close'
-            elif 'High_BTC' in col:  mapping[col] = 'High'
-            elif 'Low_BTC' in col:   mapping[col] = 'Low'
-            elif 'Open_BTC' in col:  mapping[col] = 'Open'
-            elif 'Volume_BTC' in col:mapping[col] = 'Volume'
+            if 'Close_BTC' in col:    mapping[col] = 'Close'
+            elif 'High_BTC' in col:   mapping[col] = 'High'
+            elif 'Low_BTC' in col:    mapping[col] = 'Low'
+            elif 'Open_BTC' in col:   mapping[col] = 'Open'
+            elif 'Volume_BTC' in col: mapping[col] = 'Volume'
         btc_data = btc_data.rename(columns=mapping)
         logger.info(f"Columnas aplanadas: {btc_data.columns.tolist()}")
 
@@ -176,15 +176,15 @@ def process_market_data(data_dict):
     # 5. Correlación y beta (solo si NASDAQ y GLD existen)
     if 'NASDAQ' in btc_data.columns and 'GLD' in btc_data.columns:
         logger.info("Calculando indicadores cruzados (corr & beta)...")
-        btc_data['BTC_return']   = btc_data['Close'].pct_change()
+        btc_data['BTC_return']    = btc_data['Close'].pct_change()
         btc_data['NASDAQ_return'] = btc_data['NASDAQ'].pct_change()
         btc_data['GLD_return']    = btc_data['GLD'].pct_change()
 
         btc_data['BTC_NASDAQ_corr_5d'] = btc_data['BTC_return'].rolling(5).corr(btc_data['NASDAQ_return'])
         btc_data['BTC_GLD_corr_5d']    = btc_data['BTC_return'].rolling(5).corr(btc_data['GLD_return'])
 
-        nasdaq_var_10d = btc_data['NASDAQ_return'].rolling(10).var()
-        btc_nasdaq_cov_10d = btc_data['BTC_return'].rolling(10).cov(btc_data['NASDAQ_return'])
+        nasdaq_var_10d      = btc_data['NASDAQ_return'].rolling(10).var()
+        btc_nasdaq_cov_10d  = btc_data['BTC_return'].rolling(10).cov(btc_data['NASDAQ_return'])
         btc_data['BTC_NASDAQ_beta_10d'] = btc_nasdaq_cov_10d / nasdaq_var_10d
     else:
         logger.warning("Falta NASDAQ o GLD: no se calculan corr/beta")
@@ -321,19 +321,24 @@ def main():
             try:
                 from supabase import create_client
                 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+                # 1) Obtener última fecha guardada en market_data
                 resp = supabase.table("market_data").select("date").order('date', desc=True).limit(1).execute()
                 if resp.data and len(resp.data) > 0:
                     last_date = datetime.strptime(resp.data[0]['date'], '%Y-%m-%d').date()
+                    # 2) Restar LOOKBACK_BUFFER a dicha fecha
                     start_date = last_date - timedelta(days=LOOKBACK_BUFFER) + timedelta(days=1)
                     if start_date >= end_date:
                         logger.info("Datos ya actualizados.")
                         return 0
                 else:
+                    # Si no existe ninguna fila en market_data, arrancar con buffer + days
                     start_date = end_date - timedelta(days=args.days + LOOKBACK_BUFFER)
             except Exception as e:
                 logger.error(f"Error calculando start_date incremental: {e}")
                 start_date = end_date - timedelta(days=args.days + LOOKBACK_BUFFER)
         else:
+            # Modo no-incremental: traer (days + buffer) días
             start_date = end_date - timedelta(days=args.days + LOOKBACK_BUFFER)
 
         logger.info(f"Recopilando datos desde {start_date} hasta {end_date}")
@@ -344,17 +349,22 @@ def main():
             logger.error("Error procesando datos de mercado.")
             return 1
 
+        # Si no es incremental, filtrar para quedarnos solo con los últimos `days`
         if not args.incremental:
             cutoff_date = end_date - timedelta(days=args.days)
             filtered_df = processed_df[processed_df.index >= pd.Timestamp(cutoff_date)]
             logger.info(f"Filtrado a {len(filtered_df)} días de datos")
         else:
+            # En modo incremental ya traemos todo desde (last_date - buffer); 
+            # dejamos ese DataFrame completo para guardar en Supabase
             filtered_df = processed_df
-            logger.info(f"Usando {len(filtered_df)} días (incremental)")
+            logger.info(f"Usando {len(filtered_df)} días (incluyendo buffer)")
 
+        # 3) Guardar a parquet
         output_file = f'market_data_{end_date.strftime("%Y%m%d")}.parquet'
         save_to_parquet(filtered_df, output_file)
 
+        # 4) Subir a Supabase
         if SUPABASE_URL and SUPABASE_KEY:
             save_to_supabase(filtered_df, SUPABASE_URL, SUPABASE_KEY)
         else:
