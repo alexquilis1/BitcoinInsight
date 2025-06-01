@@ -55,6 +55,9 @@ def fetch_market_data(tickers, start_date, end_date):
             try:
                 df = yf.download(ticker, start=start_date, end=end_date, progress=False, timeout=30)
                 if not df.empty:
+                    # Flatten MultiIndex columns if they exist
+                    if isinstance(df.columns, pd.MultiIndex):
+                        df.columns = df.columns.droplevel(1)  # Remove ticker level
                     data[ticker] = df
                     break
             except Exception as e:
@@ -72,33 +75,40 @@ def process_data(raw_data):
 
     btc = raw_data["BTC-USD"].copy()
     btc.index = pd.to_datetime(btc.index)
+    
+    # Ensure we have clean Series for all BTC columns
+    btc_close = btc["Close"].squeeze()  # Convert to Series if needed
+    btc_high = btc["High"].squeeze()
+    btc_low = btc["Low"].squeeze()
+    btc_open = btc["Open"].squeeze()
+    btc_volume = btc["Volume"].squeeze() if "Volume" in btc.columns else pd.Series(np.nan, index=btc.index)
 
     # Merge NASDAQ close
     if "^IXIC" in raw_data and not raw_data["^IXIC"].empty:
         nasdaq = raw_data["^IXIC"].copy()
         nasdaq.index = pd.to_datetime(nasdaq.index)
-        # Ensure we're working with Series, not DataFrame
-        nasdaq_close = nasdaq["Close"]
+        nasdaq_close = nasdaq["Close"].squeeze()  # Ensure Series
         btc["NASDAQ"] = nasdaq_close.reindex(btc.index).interpolate(method="linear")
     else:
-        btc["NASDAQ"] = np.nan
+        btc["NASDAQ"] = pd.Series(np.nan, index=btc.index)
         logger.warning("NASDAQ data missing; will skip correlation/beta calculations")
 
     # Merge GLD close
     if "GLD" in raw_data and not raw_data["GLD"].empty:
         gld = raw_data["GLD"].copy()
         gld.index = pd.to_datetime(gld.index)
-        # Ensure we're working with Series, not DataFrame
-        gld_close = gld["Close"]
+        gld_close = gld["Close"].squeeze()  # Ensure Series
         btc["GLD"] = gld_close.reindex(btc.index).interpolate(method="linear")
     else:
-        btc["GLD"] = np.nan
+        btc["GLD"] = pd.Series(np.nan, index=btc.index)
         logger.warning("GLD data missing; will skip correlation/beta calculations")
 
-    # Ensure all columns are Series before calculations
-    btc_close = btc["Close"]
-    btc_high = btc["High"]
-    btc_low = btc["Low"]
+    # Ensure all main columns are clean Series
+    btc["Close"] = btc_close
+    btc["High"] = btc_high
+    btc["Low"] = btc_low
+    btc["Open"] = btc_open
+    btc["Volume"] = btc_volume
     
     # 1. SMA10 and ratio
     sma10 = btc_close.rolling(window=10).mean()
@@ -113,30 +123,32 @@ def process_data(raw_data):
     btc["ROC_3d"] = btc_close.pct_change(periods=3) * 100
 
     # 4. volume_change
-    if "Volume" in btc.columns:
-        btc_volume = btc["Volume"]
+    if not btc_volume.isna().all():
         btc["volume_change_1d"] = btc_volume.pct_change()
     else:
-        btc["volume_change_1d"] = np.nan
-        logger.warning("Volume column missing; skipping volume_change_1d")
+        btc["volume_change_1d"] = pd.Series(np.nan, index=btc.index)
+        logger.warning("Volume data unavailable; skipping volume_change_1d")
 
-    # 5–7. Cross-asset correlation/beta (only if data is available)
+    # 5–7. Cross-asset correlation/beta
     btc_return = btc_close.pct_change()
     btc["BTC_return"] = btc_return
     
-    if not btc["NASDAQ"].isna().all():
-        nasdaq_return = btc["NASDAQ"].pct_change()
+    nasdaq_series = btc["NASDAQ"].squeeze() if "NASDAQ" in btc.columns else pd.Series(np.nan, index=btc.index)
+    gld_series = btc["GLD"].squeeze() if "GLD" in btc.columns else pd.Series(np.nan, index=btc.index)
+    
+    if not nasdaq_series.isna().all():
+        nasdaq_return = nasdaq_series.pct_change()
         btc["NASDAQ_return"] = nasdaq_return
     else:
-        btc["NASDAQ_return"] = np.nan
         nasdaq_return = pd.Series(np.nan, index=btc.index)
+        btc["NASDAQ_return"] = nasdaq_return
 
-    if not btc["GLD"].isna().all():
-        gld_return = btc["GLD"].pct_change()
+    if not gld_series.isna().all():
+        gld_return = gld_series.pct_change()
         btc["GLD_return"] = gld_return
     else:
-        btc["GLD_return"] = np.nan
         gld_return = pd.Series(np.nan, index=btc.index)
+        btc["GLD_return"] = gld_return
 
     # 5. BTC-GLD corr (5-day)
     btc["BTC_GLD_corr_5d"] = btc_return.rolling(5).corr(gld_return)
@@ -166,9 +178,6 @@ def process_data(raw_data):
     
     result_df = btc[final_cols].copy()
     result_df = result_df.rename(columns=column_mapping)
-    
-    # Update final_cols with renamed columns
-    final_cols_renamed = [column_mapping.get(col, col) for col in final_cols]
     
     return result_df.dropna()
 
