@@ -6,7 +6,7 @@ extracts their content, calculates sentiment scores using a pretrained model,
 and stores the results in Supabase. Designed for daily scheduled execution.
 
 Usage:
-    python news_sentiment_collector.py [--days 30] [--incremental]
+    python crypto_news_collector.py [--days 30] [--incremental]
 
 Author: Your Name
 Date: June 2025
@@ -53,11 +53,11 @@ except FileNotFoundError:
     SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 # Constants
-SENTIMENT_MODEL = "cardiffnlp/twitter-roberta-base-sentiment-latest"
-QUERY = "(Bitcoin OR BTC OR crypto OR cryptocurrency) AND (price OR market OR trading OR volatility)"
+SENTIMENT_MODEL    = "cardiffnlp/twitter-roberta-base-sentiment-latest"
+QUERY              = "(Bitcoin OR BTC OR crypto OR cryptocurrency) AND (price OR market OR trading OR volatility)"
 MIN_ARTICLE_LENGTH = 100
-RETRY_COUNT = 3
-REQUEST_TIMEOUT = 10
+RETRY_COUNT        = 3
+REQUEST_TIMEOUT    = 10  # seconds
 
 
 def make_request_with_retry(url, headers=None):
@@ -80,7 +80,8 @@ def extract_article_content(url):
             return None
         soup = BeautifulSoup(response.text, 'html.parser')
         for tag in ["script", "style", "aside", "nav", "footer", "header", "form", "button"]:
-            [t.decompose() for t in soup.find_all(tag)]
+            for t in soup.find_all(tag):
+                t.decompose()
         paragraphs = [p.get_text().strip() for p in soup.find_all("p")]
         content = "\n".join(filter(None, paragraphs))
         return content if len(content) >= MIN_ARTICLE_LENGTH else None
@@ -96,8 +97,10 @@ def fetch_gnews(date: datetime, max_articles=10):
         f"&category=business,technology&apikey={GNEWS_API_KEY}"
     )
     response = make_request_with_retry(url)
-    articles = response.json().get("articles", []) if response and response.status_code == 200 else []
-    return [(a.get("url"), a.get("title")) for a in articles]
+    if response and response.status_code == 200:
+        articles = response.json().get("articles", [])
+        return [(a.get("url"), a.get("title")) for a in articles]
+    return []
 
 
 def fetch_thenewsapi(date: datetime, max_articles=3):
@@ -107,22 +110,24 @@ def fetch_thenewsapi(date: datetime, max_articles=3):
         f"&published_on={date.strftime('%Y-%m-%d')}&api_token={THENEWS_API_KEY}"
     )
     response = make_request_with_retry(url)
-    articles = response.json().get("data", []) if response and response.status_code == 200 else []
-    return [(a.get("url"), a.get("title")) for a in articles]
+    if response and response.status_code == 200:
+        articles = response.json().get("data", [])
+        return [(a.get("url"), a.get("title")) for a in articles]
+    return []
 
 
-def collect_articles(start_date, end_date):
+def collect_articles(start_date: datetime, end_date: datetime):
     all_data = []
     current = start_date
     while current <= end_date:
         logger.info(f"Fetching articles for {current}")
         urls_titles = []
-
         urls_titles += fetch_gnews(current)
         urls_titles += fetch_thenewsapi(current)
 
+        # Scrape contents
         article_texts = []
-        for url, title in urls_titles:
+        for url, _title in urls_titles:
             content = extract_article_content(url)
             if content:
                 article_texts.append(content)
@@ -132,7 +137,10 @@ def collect_articles(start_date, end_date):
             "articles": article_texts
         })
         current += timedelta(days=1)
-    return pd.DataFrame(all_data)
+
+    df = pd.DataFrame(all_data)
+    df["articles"] = df["articles"].apply(lambda lst: lst if isinstance(lst, list) else [])
+    return df
 
 
 def init_sentiment_model():
@@ -153,15 +161,15 @@ def compute_sentiment(texts: List[str], tokenizer, model):
             scores.append(sentiment)
         except Exception:
             continue
-    return np.mean(scores) if scores else None
+    return float(np.mean(scores)) if scores else None
 
 
-def add_sentiment_scores(df, tokenizer, model):
+def add_sentiment_scores(df: pd.DataFrame, tokenizer, model):
     df["mean_sentiment"] = df["articles"].apply(lambda texts: compute_sentiment(texts, tokenizer, model))
     return df
 
 
-def save_to_supabase(df, url, key, table_name="news_sentiment"):
+def save_to_supabase(df: pd.DataFrame, url: str, key: str, table_name="news_sentiment"):
     from supabase import create_client
     supabase = create_client(url, key)
     for _, row in df.iterrows():
@@ -183,9 +191,10 @@ def main():
     parser.add_argument('--incremental', action='store_true')
     args = parser.parse_args()
 
-    today = datetime.now().date()
+    today    = datetime.now().date()
     end_date = today - timedelta(days=1)
 
+    # Determine start_date
     if args.incremental and SUPABASE_URL and SUPABASE_KEY:
         try:
             from supabase import create_client
@@ -207,9 +216,12 @@ def main():
 
     logger.info(f"Collecting news from {start_date} to {end_date}")
     df = collect_articles(start_date, end_date)
+
+    # Calculate sentiment
     tokenizer, model = init_sentiment_model()
     df = add_sentiment_scores(df, tokenizer, model)
 
+    # Save local parquet as backup
     df.to_parquet(f"news_sentiment_{today.strftime('%Y%m%d')}.parquet")
     logger.info("Saved local parquet successfully.")
 
