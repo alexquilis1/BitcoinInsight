@@ -74,73 +74,103 @@ def process_data(raw_data):
     btc.index = pd.to_datetime(btc.index)
 
     # Merge NASDAQ close
-    if "^IXIC" in raw_data:
-        nasdaq = raw_data["^IXIC"]
+    if "^IXIC" in raw_data and not raw_data["^IXIC"].empty:
+        nasdaq = raw_data["^IXIC"].copy()
         nasdaq.index = pd.to_datetime(nasdaq.index)
-        btc["NASDAQ"] = nasdaq["Close"].reindex(btc.index).interpolate(method="linear")
+        # Ensure we're working with Series, not DataFrame
+        nasdaq_close = nasdaq["Close"]
+        btc["NASDAQ"] = nasdaq_close.reindex(btc.index).interpolate(method="linear")
     else:
         btc["NASDAQ"] = np.nan
         logger.warning("NASDAQ data missing; will skip correlation/beta calculations")
 
     # Merge GLD close
-    if "GLD" in raw_data:
-        gld = raw_data["GLD"]
+    if "GLD" in raw_data and not raw_data["GLD"].empty:
+        gld = raw_data["GLD"].copy()
         gld.index = pd.to_datetime(gld.index)
-        btc["GLD"] = gld["Close"].reindex(btc.index).interpolate(method="linear")
+        # Ensure we're working with Series, not DataFrame
+        gld_close = gld["Close"]
+        btc["GLD"] = gld_close.reindex(btc.index).interpolate(method="linear")
     else:
         btc["GLD"] = np.nan
         logger.warning("GLD data missing; will skip correlation/beta calculations")
 
+    # Ensure all columns are Series before calculations
+    btc_close = btc["Close"]
+    btc_high = btc["High"]
+    btc_low = btc["Low"]
+    
     # 1. SMA10 and ratio
-    btc["SMA10"] = btc["Close"].rolling(window=10).mean()
-    btc["Close_to_SMA10"] = btc["Close"] / btc["SMA10"]
+    sma10 = btc_close.rolling(window=10).mean()
+    btc["SMA10"] = sma10
+    btc["Close_to_SMA10"] = btc_close / sma10
 
     # 2. high_low_range
-    btc["high_low_range"] = (btc["High"] - btc["Low"]) / btc["Close"]
+    btc["high_low_range"] = (btc_high - btc_low) / btc_close
 
     # 3. ROC indicators
-    btc["ROC_1d"] = btc["Close"].pct_change(periods=1) * 100
-    btc["ROC_3d"] = btc["Close"].pct_change(periods=3) * 100
+    btc["ROC_1d"] = btc_close.pct_change(periods=1) * 100
+    btc["ROC_3d"] = btc_close.pct_change(periods=3) * 100
 
     # 4. volume_change
     if "Volume" in btc.columns:
-        btc["volume_change_1d"] = btc["Volume"].pct_change()
+        btc_volume = btc["Volume"]
+        btc["volume_change_1d"] = btc_volume.pct_change()
     else:
         btc["volume_change_1d"] = np.nan
         logger.warning("Volume column missing; skipping volume_change_1d")
 
     # 5–7. Cross-asset correlation/beta (only if data is available)
-    btc["BTC_return"] = btc["Close"].pct_change()
+    btc_return = btc_close.pct_change()
+    btc["BTC_return"] = btc_return
+    
     if not btc["NASDAQ"].isna().all():
-        btc["NASDAQ_return"] = btc["NASDAQ"].pct_change()
+        nasdaq_return = btc["NASDAQ"].pct_change()
+        btc["NASDAQ_return"] = nasdaq_return
     else:
         btc["NASDAQ_return"] = np.nan
+        nasdaq_return = pd.Series(np.nan, index=btc.index)
 
     if not btc["GLD"].isna().all():
-        btc["GLD_return"] = btc["GLD"].pct_change()
+        gld_return = btc["GLD"].pct_change()
+        btc["GLD_return"] = gld_return
     else:
         btc["GLD_return"] = np.nan
+        gld_return = pd.Series(np.nan, index=btc.index)
 
     # 5. BTC-GLD corr (5-day)
-    btc["BTC_GLD_corr_5d"] = btc["BTC_return"].rolling(5).corr(btc["GLD_return"])
+    btc["BTC_GLD_corr_5d"] = btc_return.rolling(5).corr(gld_return)
     # 6. BTC-NASDAQ corr (5-day)
-    btc["BTC_NASDAQ_corr_5d"] = btc["BTC_return"].rolling(5).corr(btc["NASDAQ_return"])
+    btc["BTC_NASDAQ_corr_5d"] = btc_return.rolling(5).corr(nasdaq_return)
     # 7. BTC-NASDAQ beta (10-day)
-    nas_var = btc["NASDAQ_return"].rolling(10).var()
-    cov   = btc["BTC_return"].rolling(10).cov(btc["NASDAQ_return"])
+    nas_var = nasdaq_return.rolling(10).var()
+    cov = btc_return.rolling(10).cov(nasdaq_return)
     btc["BTC_NASDAQ_beta_10d"] = cov / nas_var
 
     # Add date column for easy uploading
     btc["date"] = btc.index.strftime("%Y-%m-%d")
 
-    # Final columns of interest
+    # Final columns of interest - match the expected column names from model_dataset_generator.py
     final_cols = [
         "date", "Close", "High", "Low", "Open", "Volume",
         "NASDAQ", "GLD", "SMA10", "Close_to_SMA10", "high_low_range",
         "ROC_1d", "ROC_3d", "volume_change_1d",
         "BTC_GLD_corr_5d", "BTC_NASDAQ_corr_5d", "BTC_NASDAQ_beta_10d"
     ]
-    return btc[final_cols].dropna()
+    
+    # Rename columns to match the expected names in model_dataset_generator.py
+    column_mapping = {
+        "Close": "btc_close",
+        "Close_to_SMA10": "close_to_sma10_ratio"
+    }
+    
+    result_df = btc[final_cols].copy()
+    result_df = result_df.rename(columns=column_mapping)
+    
+    # Update final_cols with renamed columns
+    final_cols_renamed = [column_mapping.get(col, col) for col in final_cols]
+    
+    return result_df.dropna()
 
 
 def save_to_supabase(df: pd.DataFrame, url: str, key: str, table_name="market_data"):
