@@ -11,7 +11,10 @@ import httpx
 import websockets
 import json
 import time
+from dotenv import load_dotenv
 
+# Cargar variables de entorno
+load_dotenv()
 
 # Set up logging
 logging.basicConfig(
@@ -82,15 +85,18 @@ app = FastAPI(
 # Configure CORS to allow requests from your frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*", "localhost:5173"],  # Your NextJS frontend URL
+    allow_origins=["*"],  # Configura esto según tu frontend deployado
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize Supabase client
-SUPABASE_URL = 'https://djxbfvtmkwshkhmltbby.supabase.co'
-SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqeGJmdnRta3dzaGtobWx0YmJ5Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzU1MTUxOSwiZXhwIjoyMDYzMTI3NTE5fQ.oc7xogdOaoNZJ2aYyM610PuoUqMyVuCONqbsatmbp_Q'
+# ✅ Variables de entorno seguras
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_OWNER = os.getenv("GITHUB_OWNER")
+GITHUB_REPO = os.getenv("GITHUB_REPO")
 
 # REST endpoint base for Coinbase Pro (Exchange)
 COINBASE_REST = os.getenv("COINBASE_REST_URL", "https://api.exchange.coinbase.com")
@@ -98,6 +104,7 @@ COINBASE_REST = os.getenv("COINBASE_REST_URL", "https://api.exchange.coinbase.co
 # WebSocket rate limiter
 _last_trade_ts: float = 0.0
 
+# Initialize Supabase client
 supabase = None
 try:
     if SUPABASE_URL and SUPABASE_KEY:
@@ -252,45 +259,222 @@ async def get_prediction_history(days: int = 7):
     "/api/prediction/generate", 
     response_model=GeneratePredictionResponse,
     summary="Generate New Prediction",
-    description="Manually triggers the generation of a new prediction.",
+    description="Manually triggers the generation of a new prediction via GitHub Actions.",
     tags=["Predictions"]
 )
-async def generate_prediction(background_tasks: BackgroundTasks):
+async def generate_prediction():
     """
     Generate a new Bitcoin price prediction.
     
-    This endpoint triggers the prediction script to generate a new prediction
-    for tomorrow's Bitcoin price movement. The script runs as a background task
-    to prevent timeout issues with the API endpoint.
+    This endpoint triggers your existing GitHub Actions workflow to generate a new prediction
+    for tomorrow's Bitcoin price movement using repository_dispatch.
     """
-    logger.info("Manual prediction generation triggered")
+    logger.info("Manual prediction generation triggered via GitHub Actions")
     
-    def run_prediction_script():
-        """Function to run in the background"""
-        try:
-            logger.info("Starting prediction workflow script")
-            result = subprocess.run(
-                ["python", "run_workflow.py"], 
-                capture_output=True, 
-                text=True
+    try:
+        if not GITHUB_TOKEN:
+            logger.error("GitHub token not configured")
+            raise HTTPException(
+                status_code=500, 
+                detail="GitHub token not configured. Set GITHUB_TOKEN environment variable."
+            )
+        
+        # GitHub Actions repository_dispatch API endpoint
+        url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/dispatches"
+        
+        headers = {
+            "Authorization": f"Bearer {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json"
+        }
+        
+        # Payload for repository dispatch - debe coincidir con tu workflow
+        payload = {
+            "event_type": "run-bitcoin-prediction",  # Debe coincidir exactamente con tu workflow
+            "client_payload": {
+                "trigger_source": "api_manual",
+                "timestamp": datetime.now().isoformat(),
+                "triggered_by": "web_interface",
+                "reason": "Manual trigger from prediction API"
+            }
+        }
+        
+        logger.info(f"Triggering GitHub Actions workflow via repository_dispatch")
+        logger.info(f"Repository: {GITHUB_OWNER}/{GITHUB_REPO}")
+        logger.info(f"Event type: run-bitcoin-prediction")
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, headers=headers, json=payload, timeout=30)
+        
+        if response.status_code == 204:
+            logger.info("✅ GitHub Actions workflow triggered successfully")
+            return {
+                "message": "Bitcoin prediction workflow triggered successfully",
+                "status": "triggered",
+                "event_type": "run-bitcoin-prediction",
+                "repository": f"{GITHUB_OWNER}/{GITHUB_REPO}",
+                "workflow_url": f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/actions"
+            }
+        else:
+            logger.error(f"❌ Failed to trigger workflow. Status: {response.status_code}")
+            logger.error(f"Response: {response.text}")
+            
+            # Intentar obtener más detalles del error
+            error_detail = "Unknown error"
+            try:
+                error_response = response.json()
+                error_detail = error_response.get("message", error_detail)
+            except:
+                error_detail = response.text if response.text else f"HTTP {response.status_code}"
+            
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to trigger GitHub Actions workflow: {error_detail}"
             )
             
-            if result.returncode != 0:
-                logger.error(f"Prediction script failed with code {result.returncode}")
-                logger.error(f"Error output: {result.stderr}")
-            else:
-                logger.info("Prediction script completed successfully")
+    except httpx.TimeoutException:
+        logger.error("❌ Timeout while calling GitHub Actions API")
+        raise HTTPException(status_code=504, detail="Timeout while triggering workflow")
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error triggering GitHub Actions workflow: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error triggering workflow: {str(e)}")
+
+
+@app.get(
+    "/api/prediction/workflow-status",
+    summary="Check Workflow Status", 
+    description="Check the status of recent Bitcoin prediction workflows.",
+    tags=["Predictions"]
+)
+async def get_workflow_status():
+    """
+    Check the status of recent Bitcoin prediction workflows.
+    """
+    try:
+        if not GITHUB_TOKEN:
+            raise HTTPException(status_code=500, detail="GitHub token not configured")
+        
+        # Get recent workflow runs
+        url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/actions/runs"
+        
+        headers = {
+            "Authorization": f"Bearer {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        
+        params = {
+            "per_page": 10,  # Last 10 runs
+            "event": "repository_dispatch"  # Filter only repository_dispatch events
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=headers, params=params, timeout=15)
+        
+        if response.status_code == 200:
+            data = response.json()
+            workflow_runs = []
+            
+            for run in data.get("workflow_runs", []):
+                # Filter only Bitcoin prediction workflows
+                if any(keyword in run.get("name", "").lower() for keyword in ["bitcoin", "prediction"]):
+                    workflow_runs.append({
+                        "id": run["id"],
+                        "name": run["name"],
+                        "status": run["status"],
+                        "conclusion": run["conclusion"],
+                        "created_at": run["created_at"],
+                        "updated_at": run["updated_at"],
+                        "html_url": run["html_url"],
+                        "run_number": run["run_number"],
+                        "event": run["event"],
+                        "display_title": run.get("display_title", "Manual trigger")
+                    })
+            
+            return {
+                "workflow_runs": workflow_runs[:5],  # Last 5 prediction runs
+                "repository": f"{GITHUB_OWNER}/{GITHUB_REPO}",
+                "actions_url": f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/actions"
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to fetch workflow status. Status: {response.status_code}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching workflow status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching workflow status: {str(e)}")
+
+
+# Endpoint adicional para verificar la configuración
+@app.get(
+    "/api/system/github-config",
+    summary="Check GitHub Configuration",
+    description="Verify GitHub integration configuration.", 
+    tags=["System"]
+)
+async def check_github_config():
+    """
+    Check if GitHub integration is properly configured.
+    """
+    try:
+        config_status = {
+            "github_token_configured": bool(GITHUB_TOKEN),
+            "github_owner_configured": bool(GITHUB_OWNER),
+            "github_repo_configured": bool(GITHUB_REPO),
+            "repository": f"{GITHUB_OWNER}/{GITHUB_REPO}" if GITHUB_OWNER and GITHUB_REPO else None,
+            "actions_url": f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/actions" if GITHUB_OWNER and GITHUB_REPO else None
+        }
+        
+        # Test GitHub API connectivity if token is configured
+        if GITHUB_TOKEN and GITHUB_OWNER and GITHUB_REPO:
+            try:
+                url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}"
+                headers = {
+                    "Authorization": f"Bearer {GITHUB_TOKEN}",
+                    "Accept": "application/vnd.github.v3+json"
+                }
                 
-        except Exception as e:
-            logger.error(f"Error running prediction script: {str(e)}")
-    
-    # Run the prediction in the background
-    background_tasks.add_task(run_prediction_script)
-    
-    return {
-        "message": "Prediction generation started",
-        "status": "processing"
-    }
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(url, headers=headers, timeout=10)
+                
+                config_status["github_api_accessible"] = response.status_code == 200
+                config_status["repository_exists"] = response.status_code == 200
+                
+                if response.status_code == 200:
+                    repo_data = response.json()
+                    config_status["repository_info"] = {
+                        "name": repo_data.get("name"),
+                        "full_name": repo_data.get("full_name"),
+                        "private": repo_data.get("private"),
+                        "has_actions": True  # Si podemos acceder al repo, asumimos que Actions está disponible
+                    }
+                
+            except Exception as e:
+                config_status["github_api_accessible"] = False
+                config_status["api_error"] = str(e)
+        
+        # Determine overall status
+        if all([
+            config_status["github_token_configured"],
+            config_status["github_owner_configured"], 
+            config_status["github_repo_configured"],
+            config_status.get("github_api_accessible", False)
+        ]):
+            config_status["overall_status"] = "ready"
+        else:
+            config_status["overall_status"] = "needs_configuration"
+        
+        return config_status
+        
+    except Exception as e:
+        logger.error(f"Error checking GitHub configuration: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error checking configuration: {str(e)}")
     
 # --- Bitcoin Data Endpoints ---
 @app.get("/api/bitcoin/realtime", tags=["Bitcoin"])

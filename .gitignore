@@ -1,2 +1,57 @@
+﻿# Environments
+.env
+.venv
+env/
+venv/
 btc-env/
-catboost_info/
+ENV/
+env.bak/
+venv.bak/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config with secrets
+config.json
+
+# Large data files (optional)
+archive/
+*.parquet
+
+# Node modules
+node_modules/
+
+data/
