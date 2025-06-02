@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 import joblib
+import pathlib
 
 # Configure logging
 logging.basicConfig(
@@ -91,7 +92,8 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     raise ValueError("Missing required Supabase credentials")
 
 # Model folder (from your save function)
-MODEL_FOLDER = "bitcoin_lightgbm_final"
+script_dir = pathlib.Path(__file__).parent
+MODEL_FOLDER = str(script_dir.parent / "bitcoin_lightgbm_final")
 
 
 def get_yesterdays_features():
