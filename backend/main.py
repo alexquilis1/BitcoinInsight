@@ -151,7 +151,8 @@ async def get_tomorrow_prediction():
             logger.error("Supabase client not initialized")
             raise HTTPException(status_code=500, detail="Database connection not configured")
         
-        tomorrow = datetime.now().date() + timedelta(days=1)
+        # 🔧 FIX: Usar UTC consistentemente
+        tomorrow = datetime.now(timezone.utc).date() + timedelta(days=1)
         tomorrow_str = tomorrow.strftime('%Y-%m-%d')
         
         logger.info(f"Checking for prediction for tomorrow: {tomorrow_str}")
@@ -193,8 +194,8 @@ async def get_latest_prediction():
         
         logger.info("Fetching latest prediction")
         
-        # Get the current date
-        today = datetime.now().date()
+        # 🔧 FIX: Usar UTC consistentemente
+        today = datetime.now(timezone.utc).date()
         
         response = supabase.table("btc_price_predictions").select("*").order('prediction_date', desc=True).limit(1).execute()
         
@@ -242,8 +243,8 @@ async def get_prediction_history(days: int = 7):
         
         logger.info(f"Fetching predictions for the last {days} days")
         
-        # Calculate the date for N days ago
-        start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+        # 🔧 FIX: Usar UTC consistentemente
+        start_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime('%Y-%m-%d')
         
         response = supabase.table("btc_price_predictions").select("*").gte('prediction_date', start_date).order('prediction_date', desc=True).execute()
         
@@ -288,12 +289,12 @@ async def generate_prediction():
             "Content-Type": "application/json"
         }
         
-        # Payload for repository dispatch - debe coincidir con tu workflow
+        # 🔧 FIX: Usar UTC consistentemente
         payload = {
             "event_type": "run-bitcoin-prediction",  # Debe coincidir exactamente con tu workflow
             "client_payload": {
                 "trigger_source": "api_manual",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "triggered_by": "web_interface",
                 "reason": "Manual trigger from prediction API"
             }
@@ -552,8 +553,8 @@ async def system_status():
             logger.error("Supabase client not initialized")
             raise HTTPException(status_code=500, detail="Database connection not configured")
         
-        # Get current date and tomorrow's date
-        today = datetime.now().date()
+        # 🔧 FIX: Usar UTC consistentemente
+        today = datetime.now(timezone.utc).date()
         tomorrow = today + timedelta(days=1)
         tomorrow_str = tomorrow.strftime('%Y-%m-%d')
         
