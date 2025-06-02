@@ -32,36 +32,98 @@ logging.basicConfig(
 )
 logger = logging.getLogger("model_generator")
 
+# DEBUG: Información completa del entorno
+logger.info(f"🔍 DEBUG: Current working directory: {os.getcwd()}")
+logger.info(f"🔍 DEBUG: Script file location: {__file__}")
+logger.info(f"🔍 DEBUG: Python executable: {os.sys.executable}")
+
+# Verificar variables de entorno SUPABASE
+supabase_env_vars = {k: v for k, v in os.environ.items() if 'SUPABASE' in k}
+logger.info(f"🔍 DEBUG: All SUPABASE env vars found: {list(supabase_env_vars.keys())}")
+logger.info(f"🔍 DEBUG: SUPABASE_URL in env: {'SUPABASE_URL' in os.environ}")
+logger.info(f"🔍 DEBUG: SUPABASE_KEY in env: {'SUPABASE_KEY' in os.environ}")
+
+if 'SUPABASE_URL' in os.environ:
+    url_len = len(os.environ['SUPABASE_URL'])
+    logger.info(f"🔍 DEBUG: SUPABASE_URL length: {url_len}")
+    logger.info(f"🔍 DEBUG: SUPABASE_URL starts with 'https': {os.environ['SUPABASE_URL'].startswith('https')}")
+else:
+    logger.warning("🔍 DEBUG: SUPABASE_URL not found in environment")
+
+if 'SUPABASE_KEY' in os.environ:
+    key_len = len(os.environ['SUPABASE_KEY'])
+    logger.info(f"🔍 DEBUG: SUPABASE_KEY length: {key_len}")
+else:
+    logger.warning("🔍 DEBUG: SUPABASE_KEY not found in environment")
+
+# Verificar si config.json existe en diferentes ubicaciones
+import pathlib
+current_dir = pathlib.Path.cwd()
+script_dir = pathlib.Path(__file__).parent
+root_dir = script_dir.parent
+
+config_locations = [
+    ("current dir", current_dir / "config.json"),
+    ("script dir", script_dir / "config.json"), 
+    ("parent dir", root_dir / "config.json"),
+    ("parent of parent", root_dir.parent / "config.json")
+]
+
+for location_name, config_path in config_locations:
+    exists = config_path.exists()
+    logger.info(f"🔍 DEBUG: config.json in {location_name}: {config_path} -> {exists}")
+    if exists:
+        try:
+            with open(config_path, 'r') as f:
+                content = f.read()
+            logger.info(f"🔍 DEBUG: {location_name} config.json size: {len(content)} chars")
+            # Solo mostrar primeros 100 chars para no exponer secrets
+            logger.info(f"🔍 DEBUG: {location_name} config.json preview: {content[:100]}...")
+        except Exception as e:
+            logger.error(f"🔍 DEBUG: Error reading {location_name} config.json: {e}")
+
 def load_config():
-    """Load configuration from config.json or environment variables"""
+    """Load configuration prioritizing environment variables (GitHub secrets)"""
     supabase_url = None
     supabase_key = None
     
-    # Try to load from config.json first
-    try:
-        with open("config.json", "r") as f:
-            config = json.load(f)
-        supabase_url = config.get("SUPABASE_URL")
-        supabase_key = config.get("SUPABASE_KEY")
-        if supabase_url and supabase_key:
-            logger.info("✅ Loaded Supabase config from config.json")
-        else:
-            logger.info("⚠️ config.json found but missing Supabase credentials")
-    except FileNotFoundError:
-        logger.info("📄 No config.json found, checking environment variables")
-    except json.JSONDecodeError as e:
-        logger.warning(f"⚠️ Invalid JSON in config.json: {e}")
+    # PRIORITY 1: Try environment variables first (GitHub secrets)
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_KEY")
     
-    # Fall back to environment variables if not loaded from config
-    if not supabase_url or not supabase_key:
-        supabase_url = os.environ.get("SUPABASE_URL")
-        supabase_key = os.environ.get("SUPABASE_KEY")
-        if supabase_url and supabase_key:
-            logger.info("✅ Loaded Supabase config from environment variables")
-        else:
-            logger.error("❌ No Supabase credentials found in config.json or environment")
+    if supabase_url and supabase_key:
+        logger.info("✅ Loaded Supabase config from environment variables (GitHub secrets)")
+        return supabase_url, supabase_key
+    else:
+        logger.warning("⚠️ Environment variables not found, trying config.json...")
     
-    return supabase_url, supabase_key
+    # PRIORITY 2: Try config.json in multiple locations
+    config_paths = [
+        "../config.json",                 # Parent directory (where GitHub creates it)
+        "config.json",                    # Current directory
+        str(root_dir / "config.json"),    # Root directory
+    ]
+    
+    for config_path in config_paths:
+        try:
+            if os.path.exists(config_path):
+                logger.info(f"📄 Found config.json at: {config_path}")
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                supabase_url = config.get("SUPABASE_URL")
+                supabase_key = config.get("SUPABASE_KEY")
+                if supabase_url and supabase_key:
+                    logger.info(f"✅ Loaded Supabase config from {config_path}")
+                    return supabase_url, supabase_key
+                else:
+                    logger.info(f"⚠️ {config_path} found but missing Supabase credentials")
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.debug(f"📄 Could not load {config_path}: {e}")
+            continue
+    
+    # If we get here, nothing worked
+    logger.error("❌ No Supabase credentials found in environment variables or config.json")
+    return None, None
 
 # Load configuration
 SUPABASE_URL, SUPABASE_KEY = load_config()
@@ -69,12 +131,19 @@ SUPABASE_URL, SUPABASE_KEY = load_config()
 # Validate credentials before proceeding
 if not SUPABASE_URL or not SUPABASE_KEY:
     logger.error("❌ Missing Supabase credentials. Please set SUPABASE_URL and SUPABASE_KEY")
-    logger.error("   Either in config.json or as environment variables")
+    logger.error("   Either as GitHub secrets (environment variables) or in config.json")
+    
+    # Additional debug info
+    logger.error("🔍 FINAL DEBUG INFO:")
+    logger.error(f"   - SUPABASE_URL value: {SUPABASE_URL}")
+    logger.error(f"   - SUPABASE_KEY value: {'***' + SUPABASE_KEY[-4:] if SUPABASE_KEY else None}")
+    logger.error(f"   - Working directory: {os.getcwd()}")
+    logger.error(f"   - All env vars with 'SUPABASE': {[k for k in os.environ.keys() if 'SUPABASE' in k]}")
+    
     raise ValueError("Missing required Supabase credentials")
 
 # Buffer days for rolling calculations
 SENTIMENT_BUFFER = 10  
-
 
 def fetch_data(update_only=False):
     from supabase import create_client
@@ -122,7 +191,6 @@ def fetch_data(update_only=False):
     market_df["date"]    = pd.to_datetime(market_df["date"])
     sentiment_df["date"] = pd.to_datetime(sentiment_df["date"])
     return market_df, sentiment_df
-
 
 def create_features(market_df: pd.DataFrame, sentiment_df: pd.DataFrame):
     df = pd.merge(market_df, sentiment_df, on="date", how="inner").sort_values("date")
@@ -179,7 +247,6 @@ def create_features(market_df: pd.DataFrame, sentiment_df: pd.DataFrame):
     logger.info(f"✅ Created {len(df_final)} final model rows with {len(features)-2} features.")
     return df_final
 
-
 def save_to_supabase(df: pd.DataFrame):
     from supabase import create_client
     client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -213,7 +280,6 @@ def save_to_supabase(df: pd.DataFrame):
     
     logger.info(f"✅ Supabase upload completed. Success: {success_count}, Errors: {error_count}")
 
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--update-only", action="store_true")
@@ -229,7 +295,6 @@ def main():
 
     if SUPABASE_URL and SUPABASE_KEY:
         save_to_supabase(df_final)
-
 
 if __name__ == "__main__":
     main()
