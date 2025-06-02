@@ -129,12 +129,13 @@ def run_step(step_name, command, logger, timeout=900, retry_count=1, github_acti
     for attempt in range(retry_count):
         try:
             result = subprocess.run(
-                corrected_command,  # Usar comando corregido
+                corrected_command,
                 capture_output=True,
                 text=True,
                 check=True,
                 timeout=timeout,
-                cwd=script_directory  # Ejecutar desde el directorio de scripts
+                cwd=script_directory,
+                env=os.environ.copy()
             )
             
             # Log stdout if it contains useful information
