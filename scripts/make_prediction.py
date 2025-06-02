@@ -34,16 +34,61 @@ logging.basicConfig(
 )
 logger = logging.getLogger("btc_lightgbm_prediction")
 
-# Load API keys from configuration file
-try:
-    with open('config.json', 'r') as f:
-        config = json.load(f)
-    SUPABASE_URL = config.get('SUPABASE_URL')
-    SUPABASE_KEY = config.get('SUPABASE_KEY')
-except FileNotFoundError:
-    # Fallback to environment variables
-    SUPABASE_URL = os.environ.get("SUPABASE_URL")
-    SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+def load_config():
+    """Load configuration prioritizing environment variables (GitHub secrets)"""
+    supabase_url = None
+    supabase_key = None
+    
+    # PRIORITY 1: Try environment variables first (GitHub secrets)
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_KEY")
+    
+    if supabase_url and supabase_key:
+        logger.info("✅ Loaded Supabase config from environment variables (GitHub secrets)")
+        return supabase_url, supabase_key
+    else:
+        logger.warning("⚠️ Environment variables not found, trying config.json...")
+    
+    # PRIORITY 2: Try config.json in multiple locations
+    import pathlib
+    script_dir = pathlib.Path(__file__).parent
+    root_dir = script_dir.parent
+    
+    config_paths = [
+        "../config.json",                 # Parent directory (where GitHub creates it)
+        "config.json",                    # Current directory
+        str(root_dir / "config.json"),    # Root directory
+    ]
+    
+    for config_path in config_paths:
+        try:
+            if os.path.exists(config_path):
+                logger.info(f"📄 Found config.json at: {config_path}")
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                supabase_url = config.get("SUPABASE_URL")
+                supabase_key = config.get("SUPABASE_KEY")
+                if supabase_url and supabase_key:
+                    logger.info(f"✅ Loaded Supabase config from {config_path}")
+                    return supabase_url, supabase_key
+                else:
+                    logger.info(f"⚠️ {config_path} found but missing Supabase credentials")
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.debug(f"📄 Could not load {config_path}: {e}")
+            continue
+    
+    # If we get here, nothing worked
+    logger.error("❌ No Supabase credentials found in environment variables or config.json")
+    return None, None
+
+# Load configuration
+SUPABASE_URL, SUPABASE_KEY = load_config()
+
+# Validate credentials before proceeding
+if not SUPABASE_URL or not SUPABASE_KEY:
+    logger.error("❌ Missing Supabase credentials. Please set SUPABASE_URL and SUPABASE_KEY")
+    logger.error("   Either as GitHub secrets (environment variables) or in config.json")
+    raise ValueError("Missing required Supabase credentials")
 
 # Model folder (from your save function)
 MODEL_FOLDER = "bitcoin_lightgbm_final"
