@@ -87,7 +87,7 @@ const History: React.FC = () => {
         }
 
         // Calcular dirección real y cambio porcentual
-        const actualDirection = predDayPrice > prevDayPrice ? 1 : -1;
+        const actualDirection = predDayPrice > prevDayPrice ? 1 : 0;
         const change = ((predDayPrice - prevDayPrice) / prevDayPrice) * 100;
         const wasCorrect = actualDirection === prediction.price_direction;
 
@@ -123,7 +123,7 @@ const History: React.FC = () => {
         const total = completedPredictions.length;
         const correct = completedPredictions.filter(p => p.result === 'correct').length;
         const upPredictions = completedPredictions.filter(p => p.price_direction === 1);
-        const downPredictions = completedPredictions.filter(p => p.price_direction === -1);
+        const downPredictions = completedPredictions.filter(p => p.price_direction === 0);
         const upCorrect = upPredictions.filter(p => p.result === 'correct').length;
         const downCorrect = downPredictions.filter(p => p.result === 'correct').length;
 
@@ -155,7 +155,7 @@ const History: React.FC = () => {
             case 'UP':
                 return predictions.filter(p => p.price_direction === 1);
             case 'DOWN':
-                return predictions.filter(p => p.price_direction === -1);
+                return predictions.filter(p => p.price_direction === 0);
             case 'correct':
                 return predictions.filter(p => p.result === 'correct');
             case 'incorrect':

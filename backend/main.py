@@ -2,7 +2,7 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 import subprocess
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 from typing import Optional, Dict, List, Any, Union
 from pydantic import BaseModel
@@ -569,7 +569,7 @@ async def system_status():
         return {
             "name": "Bitcoin Prediction API",
             "version": "1.0.0",
-            "system_time": datetime.now().isoformat(),
+            "system_time": datetime.now(timezone.utc).isoformat(),
             "current_date": today.strftime('%Y-%m-%d'),
             "has_tomorrow_prediction": has_tomorrow_prediction,
             "latest_prediction_date": latest_prediction['prediction_date'] if latest_prediction else None,

@@ -87,7 +87,7 @@ const RecentPredictions = () => {
         }
 
         // Calcular dirección real del día de la predicción
-        const actualDirection = predDayPrice > prevDayPrice ? 1 : -1;
+        const actualDirection = predDayPrice > prevDayPrice ? 1 : 0;
         const wasCorrect = actualDirection === prediction.price_direction;
 
         return {
