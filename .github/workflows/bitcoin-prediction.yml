@@ -35,7 +35,7 @@ jobs:
           }' > config.json
           
       - name: Run prediction workflow
-        run: python run_workflow.py --github-actions
+        run: python scripts/run_workflow.py --github-actions
         env:
           HEALTHCHECK_WORKFLOW_COMPLETE: ${{ secrets.HEALTHCHECK_WORKFLOW_COMPLETE }}
           
@@ -51,6 +51,4 @@ jobs:
       - name: Notify on failure
         if: failure()
         run: |
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d chat_id=${{ secrets.TELEGRAM_CHAT_ID }} \
             -d text="❌ Bitcoin prediction workflow failed! Check GitHub Actions for details."

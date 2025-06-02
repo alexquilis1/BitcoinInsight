@@ -3,7 +3,7 @@
 
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+const BASE_URL = 'https://btc-5fg3.onrender.com';
 
 // Interfaces para los datos de la API actualizada
 export interface RealtimeMetrics {
