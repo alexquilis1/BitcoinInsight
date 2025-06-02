@@ -18,6 +18,7 @@ import time
 import os
 import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
 # Configure logging
 def setup_logging(github_actions=False):
@@ -38,6 +39,31 @@ def setup_logging(github_actions=False):
     )
     return logging.getLogger("workflow")
 
+def get_script_directory():
+    """Obtiene el directorio donde está el script actual"""
+    return Path(__file__).parent.absolute()
+
+def get_python_executable():
+    """Obtiene el ejecutable de Python correcto"""
+    return sys.executable
+
+def build_command_with_correct_path(base_command, script_directory):
+    """Construye el comando con el path correcto al script"""
+    python_exe = get_python_executable()
+    script_name = base_command[1]  # Asumiendo ["python", "script.py", ...]
+    
+    # Construir path completo al script
+    script_path = script_directory / script_name
+    
+    # Verificar que el script existe
+    if not script_path.exists():
+        raise FileNotFoundError(f"Script not found: {script_path}")
+    
+    # Construir comando completo
+    command = [python_exe, str(script_path)] + base_command[2:]  # Agregar argumentos adicionales
+    
+    return command
+
 def format_time(seconds):
     """Format seconds into a readable time string"""
     return str(timedelta(seconds=round(seconds)))
@@ -55,26 +81,60 @@ def run_step(step_name, command, logger, timeout=900, retry_count=1, github_acti
         github_actions: Whether running in GitHub Actions
         
     Returns:
-        bool: True if step succeeded, False otherwise
+        dict: Result information with status, timing, etc.
     """
     start_time = time.time()
     start_datetime = datetime.now()
+    
+    # Obtener directorio de scripts
+    script_directory = get_script_directory()
+    
+    # Corregir el comando con paths absolutos
+    try:
+        corrected_command = build_command_with_correct_path(command, script_directory)
+        logger.info(f"📍 Script directory: {script_directory}")
+        logger.info(f"🔧 Executing: {' '.join(corrected_command)}")
+        logger.info(f"📂 Working directory: {os.getcwd()}")
+        
+    except FileNotFoundError as e:
+        logger.error(f"❌ {str(e)}")
+        # Listar archivos disponibles para debug
+        available_scripts = list(script_directory.glob("*.py"))
+        logger.error(f"Available Python scripts in {script_directory}:")
+        for script in available_scripts:
+            logger.error(f"  - {script.name}")
+        
+        if github_actions:
+            print(f"::error::{str(e)}")
+        
+        return {
+            "name": step_name,
+            "status": "failed",
+            "start_time": start_datetime,
+            "end_time": datetime.now(),
+            "duration": 0,
+            "attempt": 1,
+            "error": str(e)
+        }
     
     # GitHub Actions workflow commands for timing and grouping
     if github_actions:
         print(f"::group::{step_name}")
         print(f"::debug::Starting {step_name} at {start_datetime.isoformat()}")
+        print(f"::debug::Command: {' '.join(corrected_command)}")
+        print(f"::debug::Working directory: {script_directory}")
     
     logger.info(f"▶️ Starting {step_name} at {start_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
     
     for attempt in range(retry_count):
         try:
             result = subprocess.run(
-                command,
+                corrected_command,  # Usar comando corregido
                 capture_output=True,
                 text=True,
                 check=True,
-                timeout=timeout
+                timeout=timeout,
+                cwd=script_directory  # Ejecutar desde el directorio de scripts
             )
             
             # Log stdout if it contains useful information
@@ -91,6 +151,9 @@ def run_step(step_name, command, logger, timeout=900, retry_count=1, github_acti
             logger.info(f"✅ {step_name} completed successfully")
             logger.info(f"⏱️ Time taken: {format_time(elapsed)} (from {start_datetime.strftime('%H:%M:%S')} to {end_datetime.strftime('%H:%M:%S')})")
             
+            if github_actions:
+                print("::endgroup::")
+            
             # Store timing metrics for final report
             return {
                 "name": step_name,
@@ -103,7 +166,15 @@ def run_step(step_name, command, logger, timeout=900, retry_count=1, github_acti
             
         except subprocess.CalledProcessError as e:
             logger.error(f"❌ {step_name} failed with error code {e.returncode}")
-            logger.error(f"Error output: {e.stderr}")
+            if e.stdout:
+                logger.error(f"Stdout: {e.stdout}")
+            if e.stderr:
+                logger.error(f"Stderr: {e.stderr}")
+            
+            if github_actions:
+                print(f"::error::{step_name} failed with return code {e.returncode}")
+                if e.stderr:
+                    print(f"::error::Error output: {e.stderr}")
             
             if attempt < retry_count - 1:
                 wait_time = 30 * (attempt + 1)  # Increasing backoff
@@ -112,6 +183,7 @@ def run_step(step_name, command, logger, timeout=900, retry_count=1, github_acti
             else:
                 end_datetime = datetime.now()
                 elapsed = time.time() - start_time
+                
                 if github_actions:
                     print(f"::error::{step_name} failed after {format_time(elapsed)}")
                     print("::endgroup::")
@@ -123,7 +195,7 @@ def run_step(step_name, command, logger, timeout=900, retry_count=1, github_acti
                     "end_time": end_datetime,
                     "duration": elapsed,
                     "attempt": attempt + 1,
-                    "error": e.stderr
+                    "error": e.stderr or f"Process failed with return code {e.returncode}"
                 }
                 
         except subprocess.TimeoutExpired:
@@ -162,10 +234,6 @@ def run_step(step_name, command, logger, timeout=900, retry_count=1, github_acti
                 "attempt": attempt + 1,
                 "error": str(e)
             }
-    
-    # Close GitHub Actions group
-    if github_actions:
-        print("::endgroup::")
 
 def main():
     """Run the entire workflow"""
@@ -187,6 +255,18 @@ def main():
     
     logger.info(f"🚀 Starting Bitcoin prediction workflow at {workflow_start_datetime.strftime('%Y-%m-%d %H:%M:%S')}")
     
+    # Debug information
+    script_dir = get_script_directory()
+    logger.info(f"📍 Script directory: {script_dir}")
+    logger.info(f"🐍 Python executable: {get_python_executable()}")
+    logger.info(f"📂 Current working directory: {os.getcwd()}")
+    
+    # List available Python scripts for debugging
+    available_scripts = list(script_dir.glob("*.py"))
+    logger.info(f"📋 Available Python scripts:")
+    for script in available_scripts:
+        logger.info(f"  - {script.name}")
+    
     # Parse steps to skip
     skip_steps = set()
     if args.skip_steps:
@@ -196,6 +276,7 @@ def main():
             logger.error("Invalid --skip-steps format. Use comma-separated numbers (e.g., '1,3')")
             return 1
     
+    # Define workflow steps
     steps = [
         {
             "number": 1,
