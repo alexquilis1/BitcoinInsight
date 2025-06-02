@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4  # Actualizado a v4
         
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -34,12 +34,18 @@ jobs:
             "THENEWS_API_KEY": "${{ secrets.THENEWS_API_KEY }}"
           }' > config.json
           
+      - name: Debug - List files  # AÑADE ESTE PASO TEMPORALMENTE
+        run: |
+          pwd
+          ls -la
+          ls -la scripts/ || echo "scripts folder not found"
+          find . -name "run_workflow.py" -type f || echo "run_workflow.py not found"
+          
       - name: Run prediction workflow
         run: python scripts/run_workflow.py --github-actions
         env:
           HEALTHCHECK_WORKFLOW_COMPLETE: ${{ secrets.HEALTHCHECK_WORKFLOW_COMPLETE }}
           
-      # Updated to v4 (latest version) of upload-artifact
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -51,4 +57,4 @@ jobs:
       - name: Notify on failure
         if: failure()
         run: |
-            -d text="❌ Bitcoin prediction workflow failed! Check GitHub Actions for details."
+          echo "❌ Bitcoin prediction workflow failed! Check GitHub Actions for details."
