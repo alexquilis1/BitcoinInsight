@@ -1,8 +1,8 @@
 // ===================================================================
-// ARCHIVO: src/pages/Admin.tsx - VERSION CON DATOS 100% REALES
+// ARCHIVO: src/pages/Admin.tsx - VERSION CON FECHAS CORREGIDAS
 // ===================================================================
-// Panel de administración usando ÚNICAMENTE datos reales de endpoints
-// Sin cálculos estimados, sin porcentajes fake, solo datos reales
+// Panel de administración con manejo correcto de timezone
+// Todas las fechas usan UTC para evitar problemas de zona horaria
 // ===================================================================
 
 import React, { useState, useEffect } from 'react';
@@ -60,22 +60,60 @@ const Admin: React.FC = () => {
     });
     const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-    // Formatear fecha a dd/mm/yyyy
-    const formatDate = (dateStr: string): string => {
+    // ===================================================================
+    // FUNCIONES DE FECHA CORREGIDAS CON UTC
+    // ===================================================================
+
+    // Formatear fecha usando UTC para evitar problemas de timezone
+    const formatDateUTC = (dateStr: string): string => {
         const date = new Date(dateStr);
-        const day = date.getDate().toString().padStart(2, '0');
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const year = date.getFullYear();
+        // Usar UTC para evitar cambios por timezone
+        const day = date.getUTCDate().toString().padStart(2, '0');
+        const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+        const year = date.getUTCFullYear();
         return `${day}/${month}/${year}`;
     };
+
+    // Función para obtener fecha en formato YYYY-MM-DD usando UTC
+    const getDateKeyUTC = (date: Date): string => {
+        return date.getUTCFullYear() + '-' +
+            String(date.getUTCMonth() + 1).padStart(2, '0') + '-' +
+            String(date.getUTCDate()).padStart(2, '0');
+    };
+
+    // Función para obtener "hoy" en UTC
+    const getTodayUTC = (): Date => {
+        const now = new Date();
+        const utcDate = new Date(Date.UTC(
+            now.getUTCFullYear(),
+            now.getUTCMonth(),
+            now.getUTCDate(),
+            0, 0, 0, 0
+        ));
+        return utcDate;
+    };
+
+    // Función para parsear fecha de string a Date UTC
+    const parseDateUTC = (dateStr: string): Date => {
+        const date = new Date(dateStr);
+        return new Date(Date.UTC(
+            date.getUTCFullYear(),
+            date.getUTCMonth(),
+            date.getUTCDate(),
+            0, 0, 0, 0
+        ));
+    };
+
+    // ===================================================================
+    // CÁLCULO DE MÉTRICAS CORREGIDO
+    // ===================================================================
 
     // Calcular métricas REALES basándose en comparación de predicciones vs precios históricos
     const calculateRealMetrics = async (
         statusData: SystemStatusResponse,
         historyData: PredictionHistoryResponse
     ): Promise<AdminMetrics> => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const today = getTodayUTC(); // Usar UTC
 
         let pendingVerifications = 0;
         let correctPredictions = 0;
@@ -90,19 +128,16 @@ const Admin: React.FC = () => {
             const historicalData = await fetchHistoricalCompat(30); // 30 días de datos
             const priceMap = new Map<string, number>();
 
-            // Crear un mapa de fecha -> precio de cierre
+            // Crear un mapa de fecha -> precio de cierre usando UTC
             historicalData.prices.forEach(([timestamp, price]) => {
                 const date = new Date(timestamp);
-                const dateKey = date.getFullYear() + '-' +
-                    String(date.getMonth() + 1).padStart(2, '0') + '-' +
-                    String(date.getDate()).padStart(2, '0');
+                const dateKey = getDateKeyUTC(date); // Usar función UTC
                 priceMap.set(dateKey, price);
             });
 
             // Analizar cada predicción
             for (const prediction of historyData.predictions) {
-                const predDate = new Date(prediction.prediction_date);
-                predDate.setHours(0, 0, 0, 0);
+                const predDate = parseDateUTC(prediction.prediction_date); // Usar UTC
 
                 // Sumar confianza para promedio
                 totalConfidence += prediction.confidence_score;
@@ -111,12 +146,14 @@ const Admin: React.FC = () => {
                 if (predDate >= today) {
                     // Predicción futura - pendiente de verificar
                     pendingVerifications++;
-                    pendingDates.push(formatDate(prediction.prediction_date));
+                    pendingDates.push(formatDateUTC(prediction.prediction_date));
                 } else {
                     // Predicción pasada - puede ser validada
-                    const predDateKey = prediction.prediction_date.split('T')[0]; // YYYY-MM-DD
-                    const dayBeforeKey = new Date(predDate.getTime() - 24*60*60*1000)
-                        .toISOString().split('T')[0];
+                    const predDateKey = getDateKeyUTC(new Date(prediction.prediction_date));
+
+                    // Calcular fecha del día anterior usando UTC
+                    const dayBefore = new Date(predDate.getTime() - 24*60*60*1000);
+                    const dayBeforeKey = getDateKeyUTC(dayBefore);
 
                     const currentDayPrice = priceMap.get(predDateKey);
                     const previousDayPrice = priceMap.get(dayBeforeKey);
@@ -338,7 +375,7 @@ const Admin: React.FC = () => {
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
                                 {systemStatus?.latest_prediction_date ?
-                                    `Última: ${formatDate(systemStatus.latest_prediction_date)}` :
+                                    `Última: ${formatDateUTC(systemStatus.latest_prediction_date)}` :
                                     'Sin predicciones recientes'
                                 }
                             </div>
@@ -481,14 +518,14 @@ const Admin: React.FC = () => {
                                 </button>
                             </div>
 
-                            {/* Info del sistema - DATOS REALES */}
+                            {/* Info del sistema - DATOS REALES CON FECHAS CORREGIDAS */}
                             <div className="mt-6 pt-6 border-t border-gray-700">
                                 <h4 className="text-white font-medium mb-3">Estado del Sistema</h4>
                                 <div className="space-y-2 text-sm">
                                     <div className="flex justify-between">
                                         <span className="text-gray-400">Fecha del Sistema:</span>
                                         <span className="text-white">
-                                            {systemStatus?.current_date ? formatDate(systemStatus.current_date) : 'N/A'}
+                                            {systemStatus?.current_date ? formatDateUTC(systemStatus.current_date) : 'N/A'}
                                         </span>
                                     </div>
                                     <div className="flex justify-between">
@@ -508,7 +545,7 @@ const Admin: React.FC = () => {
                         <div className="flex items-center gap-2">
                             <Info className="w-4 h-4 text-blue-400" />
                             <span className="text-blue-300 text-sm">
-                                Última actualización: {lastRefresh.toLocaleTimeString('es-ES')}
+                                Última actualización: {lastRefresh.toLocaleTimeString('es-ES')} • Fechas en UTC
                             </span>
                         </div>
                     </div>
