@@ -40,18 +40,43 @@ logging.basicConfig(
 logger = logging.getLogger("news_sentiment")
 
 # Load config
-try:
-    with open('config.json', 'r') as f:
-        config = json.load(f)
-    GNEWS_API_KEY = config.get('GNEWS_API_KEY')
-    THENEWS_API_KEY = config.get('THENEWS_API_KEY')
-    SUPABASE_URL = config.get('SUPABASE_URL')
-    SUPABASE_KEY = config.get('SUPABASE_KEY')
-except FileNotFoundError:
-    GNEWS_API_KEY = os.environ.get("GNEWS_API_KEY")
-    THENEWS_API_KEY = os.environ.get("THENEWS_API_KEY")
-    SUPABASE_URL = os.environ.get("SUPABASE_URL")
-    SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+config_paths = ['config.json', '../config.json', './config.json']
+GNEWS_API_KEY = None
+THENEWS_API_KEY = None
+SUPABASE_URL = None
+SUPABASE_KEY = None
+
+for config_path in config_paths:
+   try:
+       with open(config_path, 'r') as f:
+           config = json.load(f)
+       GNEWS_API_KEY = config.get('GNEWS_API_KEY')
+       THENEWS_API_KEY = config.get('THENEWS_API_KEY')
+       SUPABASE_URL = config.get('SUPABASE_URL')
+       SUPABASE_KEY = config.get('SUPABASE_KEY')
+       if SUPABASE_URL and SUPABASE_KEY:
+           logger.info(f"✅ Config loaded from {config_path}")
+           break
+   except FileNotFoundError:
+       continue
+
+# Fallback to environment variables
+if not SUPABASE_URL or not SUPABASE_KEY or not GNEWS_API_KEY or not THENEWS_API_KEY:
+   GNEWS_API_KEY = GNEWS_API_KEY or os.environ.get("GNEWS_API_KEY")
+   THENEWS_API_KEY = THENEWS_API_KEY or os.environ.get("THENEWS_API_KEY")
+   SUPABASE_URL = SUPABASE_URL or os.environ.get("SUPABASE_URL")
+   SUPABASE_KEY = SUPABASE_KEY or os.environ.get("SUPABASE_KEY")
+   if SUPABASE_URL and SUPABASE_KEY:
+       logger.info("✅ Config loaded from environment variables")
+
+# Validate credentials before proceeding
+if not SUPABASE_URL or not SUPABASE_KEY:
+   logger.error("❌ Missing Supabase credentials. Please set SUPABASE_URL and SUPABASE_KEY")
+   logger.error("   Either as GitHub secrets (environment variables) or in config.json")
+   raise ValueError("Missing required Supabase credentials")
+
+if not GNEWS_API_KEY or not THENEWS_API_KEY:
+   logger.warning("⚠️ Missing news API credentials. Some features may not work properly")
 
 # Constants
 SENTIMENT_MODEL    = "cardiffnlp/twitter-roberta-base-sentiment-latest"
