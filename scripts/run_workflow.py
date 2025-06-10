@@ -4,7 +4,7 @@ Bitcoin Price Prediction Workflow
 This script runs the entire prediction workflow in the correct order:
 1. Collect market data (incremental mode)
 2. Collect news and sentiment (incremental mode)  
-3. Generate model features (update only mode)
+3. Generate model features (full regeneration)
 4. Make prediction for tomorrow
 
 Usage:
@@ -277,7 +277,7 @@ def main():
             logger.error("Invalid --skip-steps format. Use comma-separated numbers (e.g., '1,3')")
             return 1
     
-    # Define workflow steps
+    # Define workflow steps - OPTIMIZED FOR DAILY USE
     steps = [
         {
             "number": 1,
@@ -294,7 +294,7 @@ def main():
         {
             "number": 3,
             "name": "Model feature generation",
-            "command": ["python", "model_dataset_generator.py", "--update-only"],
+            "command": ["python", "model_dataset_generator.py"],  # ← CHANGED: No --update-only
             "timeout": 900  # 15 minutes
         },
         {

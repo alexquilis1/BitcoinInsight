@@ -7,7 +7,7 @@ This script:
 3. Saves the prediction to the btc_price_predictions table
 
 Usage:
-    python make_prediction_lightgbm.py
+    python make_prediction.py
 
 Author: Your Name
 Date: June 2025
@@ -35,63 +35,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger("btc_lightgbm_prediction")
 
-def load_config():
-    """Load configuration prioritizing environment variables (GitHub secrets)"""
-    supabase_url = None
-    supabase_key = None
-    
-    # PRIORITY 1: Try environment variables first (GitHub secrets)
-    supabase_url = os.environ.get("SUPABASE_URL")
-    supabase_key = os.environ.get("SUPABASE_KEY")
-    
-    if supabase_url and supabase_key:
-        logger.info("✅ Loaded Supabase config from environment variables (GitHub secrets)")
-        return supabase_url, supabase_key
-    else:
-        logger.warning("⚠️ Environment variables not found, trying config.json...")
-    
-    # PRIORITY 2: Try config.json in multiple locations
-    import pathlib
-    script_dir = pathlib.Path(__file__).parent
-    root_dir = script_dir.parent
-    
-    config_paths = [
-        "../config.json",                 # Parent directory (where GitHub creates it)
-        "config.json",                    # Current directory
-        str(root_dir / "config.json"),    # Root directory
-    ]
-    
-    for config_path in config_paths:
-        try:
-            if os.path.exists(config_path):
-                logger.info(f"📄 Found config.json at: {config_path}")
-                with open(config_path, "r") as f:
-                    config = json.load(f)
-                supabase_url = config.get("SUPABASE_URL")
-                supabase_key = config.get("SUPABASE_KEY")
-                if supabase_url and supabase_key:
-                    logger.info(f"✅ Loaded Supabase config from {config_path}")
-                    return supabase_url, supabase_key
-                else:
-                    logger.info(f"⚠️ {config_path} found but missing Supabase credentials")
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            logger.debug(f"📄 Could not load {config_path}: {e}")
-            continue
-    
-    # If we get here, nothing worked
-    logger.error("❌ No Supabase credentials found in environment variables or config.json")
-    return None, None
-
-# Load configuration
-SUPABASE_URL, SUPABASE_KEY = load_config()
+# Load config
+try:
+    with open('config.json', 'r') as f:
+        config = json.load(f)
+    SUPABASE_URL = config.get('SUPABASE_URL')
+    SUPABASE_KEY = config.get('SUPABASE_KEY')
+except FileNotFoundError:
+    SUPABASE_URL = os.environ.get("SUPABASE_URL")
+    SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
 # Validate credentials before proceeding
 if not SUPABASE_URL or not SUPABASE_KEY:
     logger.error("❌ Missing Supabase credentials. Please set SUPABASE_URL and SUPABASE_KEY")
-    logger.error("   Either as GitHub secrets (environment variables) or in config.json")
     raise ValueError("Missing required Supabase credentials")
 
-# Model folder (from your save function)
+# Model folder
 script_dir = pathlib.Path(__file__).parent
 MODEL_FOLDER = str(script_dir.parent / "bitcoin_lightgbm_final")
 
@@ -220,65 +179,30 @@ def prepare_features_for_prediction(features_df, model_components):
     """
     try:
         required_features = [
-            'BTC_Nasdaq_beta_10d',
+            'btc_nasdaq_beta_10d',
             'sent_q5_flag',
-            'ROC_1d',
+            'roc_1d',
             'high_low_range',
-            'ROC_3d',
+            'roc_3d',
             'sent_5d',
             'sent_cross_up_x_high_low_range',
-            'BTC_Nasdaq_corr_5d',
-            'BB_width',
+            'btc_nasdaq_corr_5d',
+            'bb_width',
             'sent_accel',
             'sent_vol',
             'sent_neg_x_high_low_range',
-            'sent_q2_flag_x_Close_to_SMA10'
+            'sent_q2_flag_x_close_to_sma10'
         ]
 
         scaler = model_components['scaler']
         logger.info(f"Preparing features for prediction using {len(required_features)} features")
 
-        column_mapping = {
-            'ROC_1d': ['roc_1d', 'ROC_1d'],
-            'ROC_3d': ['roc_3d', 'ROC_3d'],
-            'high_low_range': ['high_low_range', 'High_Low_Range'],
-            'BB_width': ['bb_width', 'BB_width', 'bollinger_width'],
-            'BTC_Nasdaq_beta_10d': ['btc_nasdaq_beta_10d', 'BTC_Nasdaq_beta_10d'],
-            'BTC_Nasdaq_corr_5d': ['btc_nasdaq_corr_5d', 'BTC_Nasdaq_corr_5d'],
-            'sent_q5_flag': ['sent_q5_flag'],
-            'sent_5d': ['sent_5d'],
-            'sent_cross_up_x_high_low_range': ['sent_cross_up_x_high_low_range'],
-            'sent_accel': ['sent_accel'],
-            'sent_vol': ['sent_vol'],
-            'sent_neg_x_high_low_range': ['sent_neg_x_high_low_range'],
-            'sent_q2_flag_x_Close_to_SMA10': ['sent_q2_flag_x_close_to_sma10', 'sent_q2_flag_x_Close_to_SMA10']
-        }
-
         available_columns = features_df.columns.tolist()
         logger.info(f"Available columns in database: {len(available_columns)}")
 
-        mapped_features = {}
         missing_features = []
-
         for feature_name in required_features:
-            found = False
-            if feature_name in available_columns:
-                mapped_features[feature_name] = feature_name
-                found = True
-            else:
-                variations = column_mapping.get(feature_name, [feature_name])
-                for var in variations:
-                    if var in available_columns:
-                        mapped_features[feature_name] = var
-                        found = True
-                        break
-                if not found:
-                    for col in available_columns:
-                        if col.lower() == feature_name.lower():
-                            mapped_features[feature_name] = col
-                            found = True
-                            break
-            if not found:
+            if feature_name not in available_columns:
                 missing_features.append(feature_name)
 
         if missing_features:
@@ -291,8 +215,7 @@ def prepare_features_for_prediction(features_df, model_components):
         X = []
         logger.info("📊 Feature values:")
         for feature_name in required_features:
-            mapped_name = mapped_features[feature_name]
-            value = feature_row[mapped_name]
+            value = feature_row[feature_name]
             X.append(value)
             logger.info(f"   {feature_name}: {value}")
 
@@ -357,7 +280,6 @@ def make_lightgbm_prediction(model_components, features_df):
 def save_prediction(prediction, confidence):
     """
     Save prediction for tomorrow to the btc_price_predictions table.
-    Only includes model_name (no model_version).
     """
     try:
         from supabase import create_client
@@ -449,9 +371,9 @@ def main():
         print()
         print("🤖 Model Information:")
         print(f"   Model: LightGBM Optimized (Best from TFG)")
-        print(f"   Precision: {metrics.get('precision', 'N/A'):.4f} (58.33%)")
-        print(f"   Accuracy:  {metrics.get('accuracy', 'N/A'):.4f} (56.60%)")
-        print(f"   ROC AUC:   {metrics.get('roc_auc', 'N/A'):.4f} (56.70%)")
+        print(f"   Precision: {metrics.get('precision', 'N/A'):.4f}")
+        print(f"   Accuracy:  {metrics.get('accuracy', 'N/A'):.4f}")
+        print(f"   ROC AUC:   {metrics.get('roc_auc', 'N/A'):.4f}")
         print()
         print("="*60)
 

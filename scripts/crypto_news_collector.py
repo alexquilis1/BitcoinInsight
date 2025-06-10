@@ -1,9 +1,9 @@
 """
-Cryptocurrency News Sentiment Collector (Final Production Version)
+Cryptocurrency News Sentiment Collector (Final Production Version) - WITH INTERPOLATION
 
 This script collects cryptocurrency-related news from GNews and TheNewsAPI,
 extracts their content, calculates sentiment scores using a pretrained model,
-and stores the results in Supabase. Designed for daily scheduled execution.
+and stores the results in Supabase. Now includes interpolation for days without news.
 
 Usage:
     python crypto_news_collector.py [--days 30] [--incremental]
@@ -166,6 +166,10 @@ def collect_articles(start_date: datetime, end_date: datetime):
                     descriptions.append(description)
                     article_contents.append(content)
 
+        # Log if no articles found for this date
+        if not article_contents:
+            logger.warning(f"No articles found for {current.strftime('%Y-%m-%d')} - will interpolate later")
+
         all_data.append({
             "date": current.strftime("%Y-%m-%d"),
             "titles": titles,
@@ -206,6 +210,51 @@ def add_sentiment_scores(df: pd.DataFrame, tokenizer, model):
     return df
 
 
+def interpolate_missing_sentiment(df: pd.DataFrame):
+    """
+    Interpolate sentiment for days without articles using surrounding days
+    """
+    if df.empty:
+        return df
+    
+    # Convert date to datetime for proper sorting
+    df_copy = df.copy()
+    df_copy['date_dt'] = pd.to_datetime(df_copy['date'])
+    df_copy = df_copy.sort_values('date_dt')
+    
+    # Count missing sentiment values
+    missing_before = df_copy['mean_sentiment'].isna().sum()
+    
+    if missing_before == 0:
+        logger.info("✅ No missing sentiment values to interpolate")
+        return df
+    
+    # Interpolate missing sentiment values
+    # First forward fill, then backward fill, then linear interpolation
+    df_copy['mean_sentiment'] = df_copy['mean_sentiment'].fillna(method='ffill')
+    df_copy['mean_sentiment'] = df_copy['mean_sentiment'].fillna(method='bfill')
+    df_copy['mean_sentiment'] = df_copy['mean_sentiment'].interpolate(method='linear')
+    
+    # If still missing (shouldn't happen), fill with neutral sentiment
+    df_copy['mean_sentiment'] = df_copy['mean_sentiment'].fillna(0.0)
+    
+    # Count how many we interpolated
+    missing_after = df_copy['mean_sentiment'].isna().sum()
+    interpolated_count = missing_before - missing_after
+    
+    if interpolated_count > 0:
+        logger.info(f"✅ Interpolated sentiment for {interpolated_count} days without articles")
+        
+        # Log which dates were interpolated
+        interpolated_dates = df_copy[df['mean_sentiment'].isna() & df_copy['mean_sentiment'].notna()]['date'].tolist()
+        if interpolated_dates:
+            logger.info(f"   Interpolated dates: {interpolated_dates}")
+    
+    # Drop the temporary datetime column and return
+    df_result = df_copy.drop(columns=['date_dt'])
+    return df_result
+
+
 def save_to_supabase(df: pd.DataFrame, url: str, key: str, table_name="news_sentiment"):
     from supabase import create_client
     supabase = create_client(url, key)
@@ -215,30 +264,44 @@ def save_to_supabase(df: pd.DataFrame, url: str, key: str, table_name="news_sent
     
     for _, row in df.iterrows():
         try:
-            record = {
-                "date": row["date"],
-                "titles": json.dumps(row["titles"]) if row["titles"] else None,
-                "urls": json.dumps(row["urls"]) if row["urls"] else None,
-                "sources": json.dumps(row["sources"]) if row["sources"] else None,
-                "descriptions": json.dumps(row["descriptions"]) if row["descriptions"] else None,
-                "article_contents": json.dumps(row["article_contents"]) if row["article_contents"] else None,
-                "mean_sentiment": row["mean_sentiment"] if pd.notna(row["mean_sentiment"]) else None,
-            }
+            # For interpolated sentiment (days without articles), use minimal data
+            has_articles = row["article_contents"] and len(row["article_contents"]) > 0
             
-            # Skip rows with no articles
-            if not row["article_contents"] or len(row["article_contents"]) == 0:
-                logger.warning(f"Skipping date {record['date']} - no articles found")
-                continue
+            if has_articles:
+                # Normal record with articles
+                record = {
+                    "date": row["date"],
+                    "titles": json.dumps(row["titles"]) if row["titles"] else None,
+                    "urls": json.dumps(row["urls"]) if row["urls"] else None,
+                    "sources": json.dumps(row["sources"]) if row["sources"] else None,
+                    "descriptions": json.dumps(row["descriptions"]) if row["descriptions"] else None,
+                    "article_contents": json.dumps(row["article_contents"]) if row["article_contents"] else None,
+                    "mean_sentiment": row["mean_sentiment"] if pd.notna(row["mean_sentiment"]) else None,
+                }
+            else:
+                # Interpolated sentiment record (no articles found)
+                record = {
+                    "date": row["date"],
+                    "titles": json.dumps(["[Interpolated - No articles found]"]),
+                    "urls": json.dumps([]),
+                    "sources": json.dumps([]),
+                    "descriptions": json.dumps([]),
+                    "article_contents": json.dumps([]),
+                    "mean_sentiment": row["mean_sentiment"] if pd.notna(row["mean_sentiment"]) else None,
+                }
+                logger.info(f"Saving interpolated sentiment for {row['date']}: {row['mean_sentiment']:.4f}")
                 
             exists = supabase.table(table_name).select("id").eq("date", row["date"]).execute()
             if exists.data:
                 supabase.table(table_name).update(record).eq("id", exists.data[0]['id']).execute()
                 success_count += 1
-                logger.info(f"Updated existing record for {row['date']}")
+                action = "Updated" if has_articles else "Updated (interpolated)"
+                logger.info(f"{action} existing record for {row['date']}")
             else:
                 supabase.table(table_name).insert(record).execute()
                 success_count += 1
-                logger.info(f"Inserted new record for {row['date']}")
+                action = "Inserted" if has_articles else "Inserted (interpolated)"
+                logger.info(f"{action} new record for {row['date']}")
                 
         except Exception as e:
             logger.error(f"Failed to save record for date {row['date']}: {e}")
@@ -282,6 +345,9 @@ def main():
     # Calculate sentiment
     tokenizer, model = init_sentiment_model()
     df = add_sentiment_scores(df, tokenizer, model)
+    
+    # Interpolate missing sentiment values
+    df = interpolate_missing_sentiment(df)
 
     # Save local parquet as backup
     df.to_parquet(f"news_sentiment_{today.strftime('%Y%m%d')}.parquet")

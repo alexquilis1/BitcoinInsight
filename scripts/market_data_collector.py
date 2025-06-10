@@ -1,8 +1,9 @@
 """
-Cryptocurrency Market Data Collector (Production Version)
+Cryptocurrency Market Data Collector (Production Version) - WITH WEEKEND INTERPOLATION
 
 This script collects and processes market data for BTC-USD, NASDAQ (^IXIC), and Gold (GLD),
 computes technical indicators, and stores the data into Supabase for modeling purposes.
+Now includes interpolation for weekend/holiday gaps in traditional markets.
 
 Usage:
     python market_data_collector.py [--days 30] [--incremental]
@@ -43,7 +44,7 @@ except FileNotFoundError:
     SUPABASE_URL = os.environ.get("SUPABASE_URL")
     SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-TICKERS         = ["BTC-USD", "^IXIC"]  # Removed GLD since btc_gld_corr_5d is not needed
+TICKERS         = ["BTC-USD", "^IXIC"]  # No GLD needed
 LOOKBACK_BUFFER = 25  # Increased buffer for 20-day Bollinger Bands calculation
 
 
@@ -68,6 +69,41 @@ def fetch_market_data(tickers, start_date, end_date):
     return data
 
 
+def interpolate_weekend_data(df, column_name):
+    """
+    Interpolate missing data for weekends and holidays using forward fill + linear interpolation
+    """
+    if column_name not in df.columns:
+        logger.warning(f"Column {column_name} not found for interpolation")
+        return df
+    
+    original_missing = df[column_name].isna().sum()
+    
+    # Create a complete date range (including weekends)
+    full_date_range = pd.date_range(start=df.index.min(), end=df.index.max(), freq='D')
+    df_reindexed = df.reindex(full_date_range)
+    
+    # Forward fill first (use last known value)
+    df_reindexed[column_name] = df_reindexed[column_name].fillna(method='ffill')
+    
+    # Then linear interpolation for any remaining gaps
+    df_reindexed[column_name] = df_reindexed[column_name].interpolate(method='linear')
+    
+    # If there are still NaN values at the beginning, backward fill
+    df_reindexed[column_name] = df_reindexed[column_name].fillna(method='bfill')
+    
+    # Return to original index
+    result = df_reindexed.reindex(df.index)
+    
+    final_missing = result[column_name].isna().sum()
+    filled_count = original_missing - final_missing
+    
+    if filled_count > 0:
+        logger.info(f"Interpolated {filled_count} missing values for {column_name}")
+    
+    return result
+
+
 def process_data(raw_data):
     if "BTC-USD" not in raw_data or raw_data["BTC-USD"].empty:
         logger.error("BTC-USD data missing")
@@ -83,12 +119,16 @@ def process_data(raw_data):
     btc_open = btc["Open"].squeeze()
     btc_volume = btc["Volume"].squeeze() if "Volume" in btc.columns else pd.Series(np.nan, index=btc.index)
 
-    # Merge NASDAQ close
+    # Merge NASDAQ close with interpolation
     if "^IXIC" in raw_data and not raw_data["^IXIC"].empty:
         nasdaq = raw_data["^IXIC"].copy()
         nasdaq.index = pd.to_datetime(nasdaq.index)
         nasdaq_close = nasdaq["Close"].squeeze()  # Ensure Series
-        btc["NASDAQ"] = nasdaq_close.reindex(btc.index).interpolate(method="linear")
+        
+        # Merge and then interpolate missing weekend/holiday data
+        btc["NASDAQ"] = nasdaq_close.reindex(btc.index)
+        btc = interpolate_weekend_data(btc, "NASDAQ")
+        logger.info("✅ NASDAQ data merged and interpolated for weekends/holidays")
     else:
         btc["NASDAQ"] = pd.Series(np.nan, index=btc.index)
         logger.warning("NASDAQ data missing; will skip correlation/beta calculations")
@@ -126,7 +166,7 @@ def process_data(raw_data):
         btc["volume_change_1d"] = pd.Series(np.nan, index=btc.index)
         logger.warning("Volume data unavailable; skipping volume_change_1d")
 
-    # 6. Cross-asset correlation/beta with NASDAQ only
+    # 6. Cross-asset correlation/beta with NASDAQ
     btc_return = btc_close.pct_change()
     btc["BTC_return"] = btc_return
     
@@ -148,7 +188,7 @@ def process_data(raw_data):
     # Add date column for easy uploading
     btc["date"] = btc.index.strftime("%Y-%m-%d")
 
-    # Only include essential columns needed for the exact model features
+    # Include all essential columns
     essential_cols = [
         "date", 
         "Close",                  # Will become btc_close
@@ -162,7 +202,7 @@ def process_data(raw_data):
         "ROC_1d",                 # Direct feature  
         "ROC_3d",                 # Direct feature
         "bb_width",               # Direct feature
-        "volume_change_1d",       # Not in final features but keeping for compatibility
+        "volume_change_1d",       # Volume feature
         "BTC_NASDAQ_corr_5d",     # Direct feature
         "BTC_NASDAQ_beta_10d"     # Direct feature
     ]
@@ -185,7 +225,10 @@ def process_data(raw_data):
         "SMA10": "btc_sma10",
         "Close_to_SMA10": "close_to_sma10_ratio",
         "BTC_NASDAQ_corr_5d": "btc_nasdaq_corr_5d",
-        "BTC_NASDAQ_beta_10d": "btc_nasdaq_beta_10d"
+        "BTC_NASDAQ_beta_10d": "btc_nasdaq_beta_10d",
+        "ROC_1d": "roc_1d",        # Fixed to lowercase
+        "ROC_3d": "roc_3d",        # Fixed to lowercase
+        "bb_width": "bb_width"     # Already correct
     }
     
     result_df = btc[available_cols].copy()
@@ -193,7 +236,13 @@ def process_data(raw_data):
     
     logger.info(f"Final columns being saved: {list(result_df.columns)}")
     
-    return result_df.dropna()
+    # Drop rows with too many NaN values (keep if at least 70% of features are available)
+    min_required_cols = int(len(result_df.columns) * 0.7)
+    result_df = result_df.dropna(thresh=min_required_cols)
+    
+    logger.info(f"✅ Processed {len(result_df)} rows with weekend/holiday interpolation")
+    
+    return result_df
 
 
 def save_to_supabase(df: pd.DataFrame, url: str, key: str, table_name="market_data"):
