@@ -33,14 +33,19 @@ logging.basicConfig(
 logger = logging.getLogger("model_generator")
 
 # Load config
-try:
-    with open('config.json', 'r') as f:
-        config = json.load(f)
-    SUPABASE_URL = config.get('SUPABASE_URL')
-    SUPABASE_KEY = config.get('SUPABASE_KEY')
-except FileNotFoundError:
-    SUPABASE_URL = os.environ.get("SUPABASE_URL")
-    SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+# En model_dataset_generator.py, líneas 32-40:
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+# Si no las encuentra, intentar config.json
+if not SUPABASE_URL or not SUPABASE_KEY:
+    try:
+        with open('config.json', 'r') as f:
+            config = json.load(f)
+        SUPABASE_URL = SUPABASE_URL or config.get('SUPABASE_URL') 
+        SUPABASE_KEY = SUPABASE_KEY or config.get('SUPABASE_KEY')
+    except FileNotFoundError:
+        pass
 
 # Validate credentials before proceeding
 if not SUPABASE_URL or not SUPABASE_KEY:

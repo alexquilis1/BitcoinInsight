@@ -34,6 +34,13 @@ jobs:
             "THENEWS_API_KEY": "${{ secrets.THENEWS_API_KEY }}"
           }' > config.json
           
+          # DEBUG: Verificar archivo
+          echo "=== Config file created ==="
+          ls -la config.json
+          echo "=== Config file content (masked) ==="
+          cat config.json | sed 's/".*"/"***"/g'
+          echo "=== End debug ==="
+          
       - name: Run prediction workflow
         run: python scripts/run_workflow.py --github-actions
         env:
