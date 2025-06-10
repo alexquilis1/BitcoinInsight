@@ -1,11 +1,11 @@
 // ===================================================================
-// ARCHIVO: src/pages/Admin.tsx - VERSION CON FECHAS CORREGIDAS
+// ARCHIVO: src/pages/Admin.tsx - VERSION LIMPIA SIN ERRORES DE LINTING
 // ===================================================================
 // Panel de administración con manejo correcto de timezone
 // Todas las fechas usan UTC para evitar problemas de zona horaria
 // ===================================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, TrendingUp, Calendar, Target, Clock3, Database, LogOut, Wifi, Info, CheckCircle, AlertCircle } from 'lucide-react';
 import {
     fetchSystemStatus,
@@ -16,10 +16,7 @@ import {
 } from '../utils/api';
 import type {
     SystemStatusResponse,
-    PredictionHistoryResponse,
-    PredictionModel,
-    HistoricalSeries,
-    RealtimeMetrics
+    PredictionHistoryResponse
 } from '../utils/api';
 import AdminProtection from '../components/AdminProtection';
 
@@ -44,8 +41,6 @@ const Admin: React.FC = () => {
 
     // Estados para datos reales de la API
     const [systemStatus, setSystemStatus] = useState<SystemStatusResponse | null>(null);
-    const [predictionHistory, setPredictionHistory] = useState<PredictionHistoryResponse | null>(null);
-    const [currentPrice, setCurrentPrice] = useState<number | null>(null);
 
     const [metrics, setMetrics] = useState<AdminMetrics>({
         totalPredictions: 0,
@@ -74,53 +69,57 @@ const Admin: React.FC = () => {
         return `${day}/${month}/${year}`;
     };
 
-    // Función para obtener fecha en formato YYYY-MM-DD usando UTC
-    const getDateKeyUTC = (date: Date): string => {
-        return date.getUTCFullYear() + '-' +
-            String(date.getUTCMonth() + 1).padStart(2, '0') + '-' +
-            String(date.getUTCDate()).padStart(2, '0');
-    };
-
-    // Función para obtener "hoy" en UTC
-    const getTodayUTC = (): Date => {
-        const now = new Date();
-        const utcDate = new Date(Date.UTC(
-            now.getUTCFullYear(),
-            now.getUTCMonth(),
-            now.getUTCDate(),
-            0, 0, 0, 0
-        ));
-        return utcDate;
-    };
-
-    // Función para parsear fecha de string a Date UTC
-    const parseDateUTC = (dateStr: string): Date => {
-        const date = new Date(dateStr);
-        return new Date(Date.UTC(
-            date.getUTCFullYear(),
-            date.getUTCMonth(),
-            date.getUTCDate(),
-            0, 0, 0, 0
-        ));
-    };
-
     // ===================================================================
     // CÁLCULO DE MÉTRICAS CORREGIDO
     // ===================================================================
 
     // Calcular métricas REALES basándose en comparación de predicciones vs precios históricos
-    const calculateRealMetrics = async (
+    const calculateRealMetrics = useCallback(async (
         statusData: SystemStatusResponse,
         historyData: PredictionHistoryResponse
     ): Promise<AdminMetrics> => {
-        const today = getTodayUTC(); // Usar UTC
+        // Funciones UTC locales para evitar dependencias circulares
+        const getTodayUTCLocal = (): Date => {
+            const now = new Date();
+            return new Date(Date.UTC(
+                now.getUTCFullYear(),
+                now.getUTCMonth(),
+                now.getUTCDate(),
+                0, 0, 0, 0
+            ));
+        };
+
+        const getDateKeyUTCLocal = (date: Date): string => {
+            return date.getUTCFullYear() + '-' +
+                String(date.getUTCMonth() + 1).padStart(2, '0') + '-' +
+                String(date.getUTCDate()).padStart(2, '0');
+        };
+
+        const parseDateUTCLocal = (dateStr: string): Date => {
+            const date = new Date(dateStr);
+            return new Date(Date.UTC(
+                date.getUTCFullYear(),
+                date.getUTCMonth(),
+                date.getUTCDate(),
+                0, 0, 0, 0
+            ));
+        };
+
+        const formatDateUTCLocal = (dateStr: string): string => {
+            const date = new Date(dateStr);
+            const day = date.getUTCDate().toString().padStart(2, '0');
+            const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+            const year = date.getUTCFullYear();
+            return `${day}/${month}/${year}`;
+        };
+
+        const today = getTodayUTCLocal();
 
         let pendingVerifications = 0;
         let correctPredictions = 0;
         let incorrectPredictions = 0;
         let validatedPredictions = 0;
         const pendingDates: string[] = [];
-        let totalConfidence = 0;
         const validConfidenceScores: number[] = [];
 
         // Obtener datos históricos de precios para validar predicciones
@@ -131,29 +130,28 @@ const Admin: React.FC = () => {
             // Crear un mapa de fecha -> precio de cierre usando UTC
             historicalData.prices.forEach(([timestamp, price]) => {
                 const date = new Date(timestamp);
-                const dateKey = getDateKeyUTC(date); // Usar función UTC
+                const dateKey = getDateKeyUTCLocal(date);
                 priceMap.set(dateKey, price);
             });
 
             // Analizar cada predicción
             for (const prediction of historyData.predictions) {
-                const predDate = parseDateUTC(prediction.prediction_date); // Usar UTC
+                const predDate = parseDateUTCLocal(prediction.prediction_date);
 
                 // Sumar confianza para promedio
-                totalConfidence += prediction.confidence_score;
                 validConfidenceScores.push(prediction.confidence_score);
 
                 if (predDate >= today) {
                     // Predicción futura - pendiente de verificar
                     pendingVerifications++;
-                    pendingDates.push(formatDateUTC(prediction.prediction_date));
+                    pendingDates.push(formatDateUTCLocal(prediction.prediction_date));
                 } else {
                     // Predicción pasada - puede ser validada
-                    const predDateKey = getDateKeyUTC(new Date(prediction.prediction_date));
+                    const predDateKey = getDateKeyUTCLocal(new Date(prediction.prediction_date));
 
                     // Calcular fecha del día anterior usando UTC
                     const dayBefore = new Date(predDate.getTime() - 24*60*60*1000);
-                    const dayBeforeKey = getDateKeyUTC(dayBefore);
+                    const dayBeforeKey = getDateKeyUTCLocal(dayBefore);
 
                     const currentDayPrice = priceMap.get(predDateKey);
                     const previousDayPrice = priceMap.get(dayBeforeKey);
@@ -194,10 +192,10 @@ const Admin: React.FC = () => {
             pendingDates,
             avgConfidenceScore
         };
-    };
+    }, []);
 
     // Cargar datos del sistema usando solo endpoints reales
-    const loadSystemData = async (showRefreshLog = false) => {
+    const loadSystemData = useCallback(async (showRefreshLog = false) => {
         try {
             if (showRefreshLog) {
                 setIsRefreshing(true);
@@ -214,14 +212,15 @@ const Admin: React.FC = () => {
             ]);
 
             setSystemStatus(statusResponse);
-            setPredictionHistory(historyResponse);
-            setCurrentPrice(realtimeResponse.price);
 
             // Calcular métricas REALES
             const calculatedMetrics = await calculateRealMetrics(statusResponse, historyResponse);
             setMetrics(calculatedMetrics);
 
             setLastRefresh(new Date());
+
+            // Log para verificar que el precio se obtuvo correctamente
+            console.log('Current price loaded:', realtimeResponse.price);
 
         } catch (err) {
             setError('Error cargando datos del sistema: ' + (err as Error).message);
@@ -230,7 +229,7 @@ const Admin: React.FC = () => {
             setLoading(false);
             setIsRefreshing(false);
         }
-    };
+    }, [calculateRealMetrics]);
 
     // Hook principal
     useEffect(() => {
@@ -240,7 +239,7 @@ const Admin: React.FC = () => {
             const interval = setInterval(() => loadSystemData(true), 120000);
             return () => clearInterval(interval);
         }
-    }, [isAuthenticated]);
+    }, [isAuthenticated, loadSystemData]);
 
     // Generar predicción
     const handleGeneratePrediction = async () => {

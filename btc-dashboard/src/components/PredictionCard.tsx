@@ -14,13 +14,13 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ className = "" }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Calcula la fecha de mañana y la formatea en “D de M”
+    // Calcula la fecha de mañana y la formatea en "D de M"
     const tomorrowDate = useMemo(() => {
         const hoy = new Date();
         hoy.setDate(hoy.getDate() + 1);
         const opciones: Intl.DateTimeFormatOptions = { day: "numeric", month: "long" };
         const [day, month] = hoy.toLocaleDateString("es-ES", opciones).split(" de ");
-        return `${day} de ${month}`; // e.g. “2 de Junio”
+        return `${day} de ${month}`; // e.g. "2 de Junio"
     }, []);
 
     useEffect(() => {
@@ -33,10 +33,10 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ className = "" }) => {
             // Obtener predicción para mañana específicamente
             const tomorrowData: TomorrowPredictionResponse = await fetchTomorrowPrediction();
 
-            if (tomorrowData.has_prediction) {
+            if (tomorrowData.has_prediction && tomorrowData.prediction) {
                 setPrediction({
                     has_prediction: true,
-                    prediction: tomorrowData.prediction!,
+                    prediction: tomorrowData.prediction,
                     is_future_prediction: true
                 });
             } else {
@@ -104,7 +104,7 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ className = "" }) => {
         );
     }
 
-    if (error || !prediction?.has_prediction) {
+    if (error || !prediction?.has_prediction || !prediction?.prediction) {
         return (
             <div className={`bg-gray-800 rounded-lg p-4 md:p-6 border border-gray-700 flex flex-col ${className}`}>
                 <h3 className="text-base md:text-lg lg:text-xl font-semibold text-white mb-3 md:mb-4">
@@ -122,8 +122,7 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ className = "" }) => {
         );
     }
 
-    // Estado success
-    const { prediction: pred } = prediction!;
+    const pred = prediction.prediction;
     const direction = formatDirection(pred.price_direction);
     const isPredictionForFuture = prediction.is_future_prediction || false;
 
@@ -136,8 +135,8 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ className = "" }) => {
                 </h3>
                 {isPredictionForFuture && (
                     <span className="bg-blue-600/20 text-blue-400 text-xs px-2 py-1 rounded-full">
-            Futura
-          </span>
+                        Futura
+                    </span>
                 )}
             </div>
 
@@ -161,8 +160,8 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ className = "" }) => {
                     <div className="flex justify-between items-center mb-2">
                         <span className="text-sm md:text-base text-gray-300">Nivel de Confianza</span>
                         <span className="text-sm md:text-base font-semibold text-white">
-              {formatConfidence(pred.confidence_score)}
-            </span>
+                            {formatConfidence(pred.confidence_score)}
+                        </span>
                     </div>
                     <div className="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
                         <div
