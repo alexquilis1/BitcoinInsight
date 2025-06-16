@@ -11,10 +11,10 @@ export const Footer = () => {
                     {/* Sección Bitcoin Predictor */}
                     <div className="space-y-4">
                         <h3 className="text-xl font-bold text-white">
-                            Bitcoin Predictor
+                            BitcoinInsight
                         </h3>
                         <p className="text-slate-300 text-sm leading-relaxed">
-                            Predicciones de Bitcoin impulsadas por inteligencia artificial
+                            Análisis de Bitcoin simplificado para toda la comunidad cripto
                         </p>
                     </div>
 
@@ -78,14 +78,14 @@ export const Footer = () => {
                     {/* Copyright y mensaje */}
                     <div className="flex flex-col md:flex-row justify-between items-center space-y-2 md:space-y-0">
                         <p className="text-slate-400 text-sm">
-                            © 2025 Bitcoin Predictor. Todos los derechos reservados.
+                            © 2025 BitcoinInsight. Todos los derechos reservados.
                         </p>
                         <p className="text-slate-400 text-sm flex items-center">
                             Diseñado con{' '}
                             <span className="text-red-600 mx-1" aria-label="amor">
                             ♥
                         </span>{' '}
-                            para inversores inteligentes
+                            para toda la comunidad Bitcoin
                         </p>
                     </div>
                 </div>

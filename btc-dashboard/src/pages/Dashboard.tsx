@@ -126,7 +126,7 @@ export default function Dashboard() {
 
                 if (predDayPrice && prevDayPrice) {
                     validPredictions++;
-                    const actualDirection = predDayPrice > prevDayPrice ? 1 : -1;
+                    const actualDirection = predDayPrice > prevDayPrice ? 1 : 0;
                     if (actualDirection === prediction.price_direction) {
                         correctPredictions++;
                     }
@@ -157,7 +157,7 @@ export default function Dashboard() {
 
                 if (predDayPrice && prevDayPrice) {
                     recentValid++;
-                    const actualDirection = predDayPrice > prevDayPrice ? 1 : -1;
+                    const actualDirection = predDayPrice > prevDayPrice ? 1 : 0;
                     if (actualDirection === prediction.price_direction) {
                         recentCorrect++;
                     }
@@ -177,7 +177,7 @@ export default function Dashboard() {
 
                 if (predDayPrice && prevDayPrice) {
                     olderValid++;
-                    const actualDirection = predDayPrice > prevDayPrice ? 1 : -1;
+                    const actualDirection = predDayPrice > prevDayPrice ? 1 : 0;
                     if (actualDirection === prediction.price_direction) {
                         olderCorrect++;
                     }
@@ -442,11 +442,11 @@ export default function Dashboard() {
         <div className="min-h-screen bg-gray-900 p-6">
             <div className="space-y-4 md:space-y-6 lg:space-y-8">
                 {/* Header responsive */}
-                <div className="mb-4 md:mb-6">
-                    <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-white mb-1 md:mb-2">
+                <div className="mb-6">
+                    <h1 className="text-3xl md:text-4xl font-bold text-white mb-3">
                         Dashboard
                     </h1>
-                    <p className="text-sm md:text-base text-gray-400">
+                    <p className="text-gray-400 text-lg">
                         Análisis en tiempo real del mercado de Bitcoin
                     </p>
                 </div>
@@ -455,7 +455,7 @@ export default function Dashboard() {
                 {error && (
                     <div
                         className="bg-red-500/20 border border-red-500 text-red-100 p-3 md:p-4 rounded-lg mb-4 md:mb-6">
-                        <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between">
                             <div className="flex items-center">
                                 <span className="text-red-400 mr-2">⚠️</span>
                                 <span className="text-sm md:text-base">{error}</span>

@@ -1,7 +1,7 @@
 // ===================================================================
-// ARCHIVO: src/pages/Admin.tsx - VERSION LIMPIA SIN ERRORES DE LINTING
+// ARCHIVO: src/pages/Admin.tsx - VERSION COMPLETAMENTE RESPONSIVE
 // ===================================================================
-// Panel de administración con manejo correcto de timezone
+// Panel de administración con manejo correcto de timezone y diseño responsive
 // Todas las fechas usan UTC para evitar problemas de zona horaria
 // ===================================================================
 
@@ -160,10 +160,10 @@ const Admin: React.FC = () => {
                         validatedPredictions++;
 
                         // Determinar dirección real del precio
-                        const actualDirection = currentDayPrice > previousDayPrice ? 1 : -1;
+                        const actualDirection = currentDayPrice > previousDayPrice ? 1 : 0;
 
                         // Comparar con la predicción
-                        // prediction.price_direction: 1 = subida, -1 = bajada
+                        // prediction.price_direction: 1 = subida, 0 = bajada
                         if (prediction.price_direction === actualDirection) {
                             correctPredictions++;
                         } else {
@@ -268,12 +268,12 @@ const Admin: React.FC = () => {
     const AdminContent = () => {
         if (loading && !systemStatus) {
             return (
-                <div className="min-h-screen bg-gray-900 p-6">
+                <div className="min-h-screen bg-gray-900 p-4 sm:p-6">
                     <div className="max-w-7xl mx-auto">
                         <div className="flex items-center justify-center h-64">
                             <div className="text-center">
                                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                                <p className="text-gray-400">Cargando datos reales del sistema...</p>
+                                <p className="text-gray-400 text-sm sm:text-base">Cargando datos reales del sistema...</p>
                             </div>
                         </div>
                     </div>
@@ -283,13 +283,13 @@ const Admin: React.FC = () => {
 
         if (error && !systemStatus) {
             return (
-                <div className="min-h-screen bg-gray-900 p-6">
+                <div className="min-h-screen bg-gray-900 p-4 sm:p-6">
                     <div className="max-w-7xl mx-auto">
-                        <div className="bg-red-500/20 border border-red-500 text-red-100 p-6 rounded-lg text-center">
-                            <p className="mb-4">{error}</p>
+                        <div className="bg-red-500/20 border border-red-500 text-red-100 p-4 sm:p-6 rounded-lg text-center">
+                            <p className="mb-4 text-sm sm:text-base">{error}</p>
                             <button
                                 onClick={() => loadSystemData()}
-                                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
+                                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors text-sm sm:text-base"
                             >
                                 Reintentar
                             </button>
@@ -300,76 +300,76 @@ const Admin: React.FC = () => {
         }
 
         return (
-            <div className="min-h-screen bg-gray-900 p-6">
-                <div className="max-w-7xl mx-auto space-y-8">
-                    {/* Header */}
-                    <div className="mb-8">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <h1 className="text-3xl md:text-4xl font-bold text-white mb-3">
+            <div className="min-h-screen bg-gray-900 p-4 sm:p-6">
+                <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
+                    {/* Header Responsive */}
+                    <div className="mb-6 sm:mb-8">
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 sm:gap-6">
+                            <div className="flex-1">
+                                <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 sm:mb-3">
                                     Panel de Administración
                                 </h1>
-                                <p className="text-gray-400 text-lg">
+                                <p className="text-gray-400 text-base sm:text-lg">
                                     {systemStatus?.name} - v{systemStatus?.version}
                                 </p>
                             </div>
-                            <div className="flex items-center gap-4">
-                                <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm ${
+                            <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-3 sm:gap-4">
+                                <div className={`inline-flex items-center justify-center gap-2 px-3 py-2 rounded-full text-sm font-medium ${
                                     systemStatus?.status === 'online'
                                         ? 'bg-green-600 text-white'
                                         : 'bg-red-600 text-white'
                                 }`}>
-                                    <Wifi className="w-3 h-3" />
-                                    {systemStatus?.status}
+                                    <Wifi className="w-3 h-3 sm:w-4 sm:h-4" />
+                                    <span className="capitalize">{systemStatus?.status}</span>
                                 </div>
                                 <button
                                     onClick={handleLogout}
-                                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors"
+                                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm sm:text-base flex items-center justify-center gap-2 transition-colors min-w-0"
                                 >
                                     <LogOut className="w-4 h-4" />
-                                    Salir
+                                    <span>Salir</span>
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    {/* Métricas principales - TODAS CON DATOS REALES */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                    {/* Métricas principales - Completamente Responsive */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
                         {/* Total de Predicciones */}
-                        <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 text-center">
+                        <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 sm:p-6 text-center">
                             <div className="flex items-center justify-center mb-3">
-                                <Database className="w-8 h-8 text-blue-400" />
+                                <Database className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400" />
                             </div>
-                            <div className="text-3xl font-bold text-blue-400 mb-2">
+                            <div className="text-2xl sm:text-3xl font-bold text-blue-400 mb-2">
                                 {metrics.totalPredictions}
                             </div>
-                            <div className="text-gray-400 text-sm">Predicciones Totales</div>
+                            <div className="text-gray-400 text-xs sm:text-sm">Predicciones Totales</div>
                         </div>
 
                         {/* Precisión REAL */}
-                        <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 text-center">
+                        <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 sm:p-6 text-center">
                             <div className="flex items-center justify-center mb-3">
-                                <Target className="w-8 h-8 text-green-400" />
+                                <Target className="w-6 h-6 sm:w-8 sm:h-8 text-green-400" />
                             </div>
-                            <div className="text-3xl font-bold text-green-400 mb-2">
+                            <div className="text-2xl sm:text-3xl font-bold text-green-400 mb-2">
                                 {metrics.validatedPredictions > 0 ? metrics.accuracyRate.toFixed(1) : '--'}%
                             </div>
-                            <div className="text-gray-400 text-sm">
+                            <div className="text-gray-400 text-xs sm:text-sm">
                                 Precisión Real
                             </div>
                         </div>
 
                         {/* Predicción para Mañana */}
-                        <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 text-center">
+                        <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 sm:p-6 text-center">
                             <div className="flex items-center justify-center mb-3">
-                                <Calendar className="w-8 h-8 text-purple-400" />
+                                <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-purple-400" />
                             </div>
-                            <div className={`text-3xl font-bold mb-2 ${
+                            <div className={`text-2xl sm:text-3xl font-bold mb-2 ${
                                 metrics.hasTomorrowPrediction ? 'text-green-400' : 'text-red-400'
                             }`}>
                                 {metrics.hasTomorrowPrediction ? '✓' : '✗'}
                             </div>
-                            <div className="text-gray-400 text-sm">
+                            <div className="text-gray-400 text-xs sm:text-sm">
                                 Predicción para Mañana
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
@@ -381,7 +381,7 @@ const Admin: React.FC = () => {
                         </div>
 
                         {/* Pendientes de Verificar */}
-                        <div className={`border rounded-xl p-6 text-center ${
+                        <div className={`border rounded-xl p-4 sm:p-6 text-center ${
                             metrics.pendingVerifications > 5
                                 ? 'bg-red-900/20 border-red-700'
                                 : metrics.pendingVerifications > 2
@@ -389,20 +389,20 @@ const Admin: React.FC = () => {
                                     : 'bg-gray-800 border-gray-700'
                         }`}>
                             <div className="flex items-center justify-center mb-3">
-                                <Clock3 className={`w-8 h-8 ${
+                                <Clock3 className={`w-6 h-6 sm:w-8 sm:h-8 ${
                                     metrics.pendingVerifications > 5 ? 'text-red-400' :
                                         metrics.pendingVerifications > 2 ? 'text-yellow-400' :
                                             'text-gray-400'
                                 }`} />
                             </div>
-                            <div className={`text-3xl font-bold mb-2 ${
+                            <div className={`text-2xl sm:text-3xl font-bold mb-2 ${
                                 metrics.pendingVerifications > 5 ? 'text-red-400' :
                                     metrics.pendingVerifications > 2 ? 'text-yellow-400' :
                                         'text-gray-400'
                             }`}>
                                 {metrics.pendingVerifications}
                             </div>
-                            <div className={`text-sm ${
+                            <div className={`text-xs sm:text-sm ${
                                 metrics.pendingVerifications > 5 ? 'text-red-300' :
                                     metrics.pendingVerifications > 2 ? 'text-yellow-300' :
                                         'text-gray-400'
@@ -414,40 +414,40 @@ const Admin: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Desglose de Resultados Reales */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Desglose de Resultados Reales - Responsive */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
                         <div className="bg-green-900/20 border border-green-700 rounded-xl p-4 text-center">
                             <div className="flex items-center justify-center mb-2">
-                                <CheckCircle className="w-6 h-6 text-green-400" />
+                                <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-400" />
                             </div>
-                            <div className="text-2xl font-bold text-green-400 mb-1">
+                            <div className="text-xl sm:text-2xl font-bold text-green-400 mb-1">
                                 {metrics.correctPredictions}
                             </div>
-                            <div className="text-green-300 text-sm">Predicciones Correctas</div>
+                            <div className="text-green-300 text-xs sm:text-sm">Predicciones Correctas</div>
                         </div>
 
                         <div className="bg-red-900/20 border border-red-700 rounded-xl p-4 text-center">
                             <div className="flex items-center justify-center mb-2">
-                                <AlertCircle className="w-6 h-6 text-red-400" />
+                                <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-400" />
                             </div>
-                            <div className="text-2xl font-bold text-red-400 mb-1">
+                            <div className="text-xl sm:text-2xl font-bold text-red-400 mb-1">
                                 {metrics.incorrectPredictions}
                             </div>
-                            <div className="text-red-300 text-sm">Predicciones Incorrectas</div>
+                            <div className="text-red-300 text-xs sm:text-sm">Predicciones Incorrectas</div>
                         </div>
 
                         <div className="bg-blue-900/20 border border-blue-700 rounded-xl p-4 text-center">
                             <div className="flex items-center justify-center mb-2">
-                                <Target className="w-6 h-6 text-blue-400" />
+                                <Target className="w-5 h-5 sm:w-6 sm:h-6 text-blue-400" />
                             </div>
-                            <div className="text-2xl font-bold text-blue-400 mb-1">
+                            <div className="text-xl sm:text-2xl font-bold text-blue-400 mb-1">
                                 {metrics.validatedPredictions}
                             </div>
-                            <div className="text-blue-300 text-sm">Total Validadas</div>
+                            <div className="text-blue-300 text-xs sm:text-sm">Total Validadas</div>
                         </div>
                     </div>
 
-                    {/* Fechas pendientes */}
+                    {/* Fechas pendientes - Mejorado para móvil */}
                     {metrics.pendingDates.length > 0 && (
                         <div className={`p-4 rounded-lg ${
                             metrics.pendingVerifications > 5
@@ -456,16 +456,16 @@ const Admin: React.FC = () => {
                                     ? 'bg-yellow-900/20 border border-yellow-700'
                                     : 'bg-blue-900/20 border border-blue-700'
                         }`}>
-                            <h4 className={`font-medium mb-2 ${
+                            <h4 className={`font-medium mb-3 text-sm sm:text-base ${
                                 metrics.pendingVerifications > 5 ? 'text-red-300' :
                                     metrics.pendingVerifications > 2 ? 'text-yellow-300' :
                                         'text-blue-300'
                             }`}>
                                 Predicciones por verificar ({metrics.pendingDates.length}):
                             </h4>
-                            <div className="flex flex-wrap gap-2">
-                                {metrics.pendingDates.slice(0, 15).map((date, idx) => (
-                                    <span key={idx} className={`px-2 py-1 rounded text-xs ${
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+                                {metrics.pendingDates.slice(0, 18).map((date, idx) => (
+                                    <span key={idx} className={`px-2 py-1 rounded text-xs sm:text-sm text-center truncate ${
                                         metrics.pendingVerifications > 5
                                             ? 'bg-red-800 text-red-200'
                                             : metrics.pendingVerifications > 2
@@ -475,34 +475,33 @@ const Admin: React.FC = () => {
                                         {date}
                                     </span>
                                 ))}
-                                {metrics.pendingDates.length > 15 && (
-                                    <span className="text-gray-400 text-xs">
-                                        +{metrics.pendingDates.length - 15} más
+                                {metrics.pendingDates.length > 18 && (
+                                    <span className="text-gray-400 text-xs sm:text-sm text-center">
+                                        +{metrics.pendingDates.length - 18} más
                                     </span>
                                 )}
                             </div>
                         </div>
                     )}
 
-                    {/* Panel de control */}
+                    {/* Panel de control - Responsive */}
                     <div className="grid grid-cols-1">
-                        {/* Controles */}
-                        <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-                            <h3 className="text-xl font-bold text-white mb-6 flex items-center">
-                                <TrendingUp className="w-6 h-6 mr-3 text-blue-500" />
+                        <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 sm:p-6">
+                            <h3 className="text-lg sm:text-xl font-bold text-white mb-4 sm:mb-6 flex items-center">
+                                <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3 text-blue-500" />
                                 Controles del Sistema
                             </h3>
 
-                            <div className="space-y-4">
+                            <div className="space-y-3 sm:space-y-4">
                                 <button
                                     onClick={handleGeneratePrediction}
                                     disabled={isGenerating}
-                                    className="w-full flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white py-3 px-4 rounded-lg transition-colors"
+                                    className="w-full flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white py-3 px-4 rounded-lg transition-colors text-sm sm:text-base font-medium"
                                 >
                                     {isGenerating ? (
-                                        <RefreshCw className="w-5 h-5 animate-spin" />
+                                        <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
                                     ) : (
-                                        <TrendingUp className="w-5 h-5" />
+                                        <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
                                     )}
                                     <span>{isGenerating ? 'Generando...' : 'Generar Predicción'}</span>
                                 </button>
@@ -510,41 +509,45 @@ const Admin: React.FC = () => {
                                 <button
                                     onClick={() => loadSystemData(true)}
                                     disabled={isRefreshing}
-                                    className="w-full flex items-center justify-center gap-3 bg-green-600 hover:bg-green-700 disabled:bg-green-800 text-white py-3 px-4 rounded-lg transition-colors"
+                                    className="w-full flex items-center justify-center gap-3 bg-green-600 hover:bg-green-700 disabled:bg-green-800 text-white py-3 px-4 rounded-lg transition-colors text-sm sm:text-base font-medium"
                                 >
-                                    <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                                    <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
                                     <span>Actualizar Datos</span>
                                 </button>
                             </div>
 
-                            {/* Info del sistema - DATOS REALES CON FECHAS CORREGIDAS */}
-                            <div className="mt-6 pt-6 border-t border-gray-700">
-                                <h4 className="text-white font-medium mb-3">Estado del Sistema</h4>
-                                <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between">
+                            {/* Info del sistema - Responsive */}
+                            <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-gray-700">
+                                <h4 className="text-white font-medium mb-3 text-sm sm:text-base">Estado del Sistema</h4>
+                                <div className="space-y-2 text-xs sm:text-sm">
+                                    <div className="flex flex-col xs:flex-row xs:justify-between gap-1 xs:gap-0">
                                         <span className="text-gray-400">Fecha del Sistema:</span>
-                                        <span className="text-white">
+                                        <span className="text-white font-mono">
                                             {systemStatus?.current_date ? formatDateUTC(systemStatus.current_date) : 'N/A'}
                                         </span>
                                     </div>
-                                    <div className="flex justify-between">
+                                    <div className="flex flex-col xs:flex-row xs:justify-between gap-1 xs:gap-0">
                                         <span className="text-gray-400">Hora del Sistema:</span>
-                                        <span className="text-white">
+                                        <span className="text-white font-mono">
                                             {systemStatus?.system_time ? new Date(systemStatus.system_time).toLocaleTimeString('es-ES') : 'N/A'}
                                         </span>
                                     </div>
                                 </div>
                             </div>
                         </div>
-
                     </div>
 
-                    {/* Nota informativa */}
-                    <div className="bg-blue-900/10 border border-blue-800 rounded-lg p-3">
-                        <div className="flex items-center gap-2">
-                            <Info className="w-4 h-4 text-blue-400" />
-                            <span className="text-blue-300 text-sm">
-                                Última actualización: {lastRefresh.toLocaleTimeString('es-ES')} • Fechas en UTC
+                    {/* Nota informativa - Responsive */}
+                    <div className="bg-blue-900/10 border border-blue-800 rounded-lg p-3 sm:p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                            <div className="flex items-center gap-2">
+                                <Info className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                                <span className="text-blue-300 text-xs sm:text-sm">
+                                    Última actualización: {lastRefresh.toLocaleTimeString('es-ES')}
+                                </span>
+                            </div>
+                            <span className="text-blue-300 text-xs sm:text-sm sm:ml-auto">
+                                Fechas en UTC
                             </span>
                         </div>
                     </div>

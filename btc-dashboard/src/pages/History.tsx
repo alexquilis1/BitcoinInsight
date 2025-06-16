@@ -120,12 +120,13 @@ const History: React.FC = () => {
     // Calcular métricas
     const metrics = useMemo(() => {
         const completedPredictions = predictions.filter(p => p.result !== 'pending');
-        const total = completedPredictions.length;
-        const correct = completedPredictions.filter(p => p.result === 'correct').length;
+        const validPredictions = completedPredictions.length;
+        const correctPredictions = completedPredictions.filter(p => p.result === 'correct').length;
+
         const upPredictions = completedPredictions.filter(p => p.price_direction === 1);
         const downPredictions = completedPredictions.filter(p => p.price_direction === 0);
-        const upCorrect = upPredictions.filter(p => p.result === 'correct').length;
-        const downCorrect = downPredictions.filter(p => p.result === 'correct').length;
+        const upCorrectPredictions = upPredictions.filter(p => p.result === 'correct').length;
+        const downCorrectPredictions = downPredictions.filter(p => p.result === 'correct').length;
 
         // Calcular racha actual
         let currentStreak = 0;
@@ -138,13 +139,14 @@ const History: React.FC = () => {
         }
 
         return {
-            totalAccuracy: total > 0 ? (correct / total) * 100 : 0,
-            totalCorrect: correct,
-            totalPredictions: total,
+            // ✅ Forma correcta y consistente
+            totalAccuracy: validPredictions > 0 ? (correctPredictions / validPredictions) * 100 : 0,
+            totalCorrect: correctPredictions,
+            totalPredictions: validPredictions,
             upPredictions: upPredictions.length,
-            upAccuracy: upPredictions.length > 0 ? (upCorrect / upPredictions.length) * 100 : 0,
+            upAccuracy: upPredictions.length > 0 ? (upCorrectPredictions / upPredictions.length) * 100 : 0,
             downPredictions: downPredictions.length,
-            downAccuracy: downPredictions.length > 0 ? (downCorrect / downPredictions.length) * 100 : 0,
+            downAccuracy: downPredictions.length > 0 ? (downCorrectPredictions / downPredictions.length) * 100 : 0,
             currentStreak
         };
     }, [predictions]);

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchRealtime, fetchHistoricalCompat, fetchOHLC } from '../utils/api';
+import { fetchRealtime, fetchHistoricalCompat } from '../utils/api';
 import PriceChart from '../components/PriceChart';
 import VolumeChart from '../components/VolumeChart';
+import { TrendingUp, BarChart3, ArrowUp, ArrowDown, Zap, Activity } from 'lucide-react';
 
 const INTERVALS = ['1h', '1d', '7d', '1m', '6m'] as const;
 type Interval = typeof INTERVALS[number];
@@ -10,14 +11,8 @@ interface ProcessedChartData {
     labels: string[];
     prices: number[];
     volumes: number[];
-}
-
-interface OHLCData {
-    time: number;
-    open: number;
-    high: number;
-    low: number;
-    close: number;
+    allPricesForIndicators?: number[]; // ✅ NUEVO: Precios completos para indicadores
+    displayStartIndex?: number; // ✅ NUEVO: Índice donde empezar a mostrar
 }
 
 const circulatingSupply = 19700000;
@@ -26,7 +21,6 @@ const Market: React.FC = () => {
     const [selectedInterval, setSelectedInterval] = useState<Interval>('1d');
     const [chartData, setChartData] = useState<ProcessedChartData | null>(null);
     const [volumeChartData, setVolumeChartData] = useState<any>(null);
-    const [ohlcData, setOhlcData] = useState<OHLCData[] | null>(null);
     const [loading, setLoading] = useState(false);
     const [metrics, setMetrics] = useState<{ price: number; volume_24h: number } | null>(null);
     const [activeTab, setActiveTab] = useState<'price' | 'volume' | 'indicators'>('price');
@@ -39,6 +33,29 @@ const Market: React.FC = () => {
             console.error('Error cargando realtime', err);
         }
     }, []);
+
+    // ✅ FUNCIÓN PARA CREAR GRADIENTE DINÁMICO
+    const createDynamicGradient = (isUpTrend: boolean): CanvasGradient | string => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        let gradient: CanvasGradient | string = isUpTrend
+            ? 'rgba(16, 185, 129, 0.1)'
+            : 'rgba(239, 68, 68, 0.1)';
+
+        if (ctx) {
+            gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            if (isUpTrend) {
+                gradient.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
+                gradient.addColorStop(0.5, 'rgba(16, 185, 129, 0.2)');
+                gradient.addColorStop(1, 'rgba(16, 185, 129, 0.05)');
+            } else {
+                gradient.addColorStop(0, 'rgba(239, 68, 68, 0.4)');
+                gradient.addColorStop(0.5, 'rgba(239, 68, 68, 0.2)');
+                gradient.addColorStop(1, 'rgba(239, 68, 68, 0.05)');
+            }
+        }
+        return gradient;
+    };
 
     const loadChartData = useCallback(async (interval: Interval) => {
         setLoading(true);
@@ -65,67 +82,107 @@ const Market: React.FC = () => {
                     break;
                 case '6m':
                     days = 180;
-                    dataFilter = 24;
+                    dataFilter = -1; // ✅ CAMBIADO: Sin filtro para 6m
                     break;
             }
 
-            const histData = await fetchHistoricalCompat(days);
-            let reversedPrices = [...histData.prices].reverse();
-            let reversedVolumes = [...histData.volumes].reverse();
+            // ✅ CARGAR DATOS EXTRA PARA CALENTAMIENTO DE INDICADORES
+            const warmupDays = 50; // 50 días extra para indicadores precisos
+            const totalDaysToFetch = days + warmupDays;
 
-            if (dataFilter > 0 && reversedPrices.length > dataFilter) {
+            console.log(`[BITCOIN DATA] Cargando datos: ${days} días solicitados + ${warmupDays} días de calentamiento = ${totalDaysToFetch} días totales`);
+
+            const histData = await fetchHistoricalCompat(totalDaysToFetch);
+            const allPrices = [...histData.prices].reverse();
+            const allVolumes = [...histData.volumes].reverse();
+
+            // ✅ SEPARAR: datos para cálculos vs datos para mostrar
+            const totalPoints = allPrices.length;
+            const warmupPoints = Math.min(warmupDays * 24, Math.floor(totalPoints * 0.25)); // Máximo 25% para calentamiento
+            const displayStartIndex = warmupPoints;
+
+            console.log(`[BITCOIN DATA] Puntos de datos: Total=${totalPoints}, Calentamiento=${warmupPoints}, Mostrar desde índice=${displayStartIndex}`);
+
+            // ✅ DATOS PARA MOSTRAR (sin período de calentamiento)
+            let displayPrices = allPrices.slice(displayStartIndex);
+            let displayVolumes = allVolumes.slice(displayStartIndex);
+
+            if (dataFilter > 0 && displayPrices.length > dataFilter) {
                 if (interval === '1h') {
-                    reversedPrices = reversedPrices.slice(-dataFilter);
-                    reversedVolumes = reversedVolumes.slice(-dataFilter);
-                } else if (interval === '6m') {
-                    const step = Math.ceil(reversedPrices.length / dataFilter);
-                    reversedPrices = reversedPrices.filter((_, idx) => idx % step === 0);
-                    reversedVolumes = reversedVolumes.filter((_, idx) => idx % step === 0);
+                    displayPrices = displayPrices.slice(-dataFilter);
+                    displayVolumes = displayVolumes.slice(-dataFilter);
                 }
             }
 
-            const processedLabels = reversedPrices.map(([timestamp]) => {
+            const processedLabels = displayPrices.map(([timestamp]) => {
                 const date = new Date(timestamp);
+                // ✅ USAR ZONA HORARIA ESPAÑOLA
                 switch (interval) {
                     case '1h':
                     case '1d':
-                        return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+                        return date.toLocaleTimeString('es-ES', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false,
+                            timeZone: 'Europe/Madrid'
+                        });
                     case '7d':
-                        return date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+                        return date.toLocaleDateString('es-ES', {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short',
+                            timeZone: 'Europe/Madrid'
+                        });
                     case '1m':
                     case '6m':
-                        return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+                        return date.toLocaleDateString('es-ES', {
+                            day: 'numeric',
+                            month: 'short',
+                            timeZone: 'Europe/Madrid'
+                        });
                     default:
-                        return date.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' });
+                        return date.toLocaleDateString('es-ES', {
+                            month: 'short',
+                            day: 'numeric',
+                            timeZone: 'Europe/Madrid'
+                        });
                 }
             });
 
+            // ✅ DETERMINAR TENDENCIA PARA COLORES DINÁMICOS (SOLO PARA GRÁFICO DE PRECIO)
+            const prices = displayPrices.map(([, price]) => price);
+            const volumes = displayVolumes.map(([, volume]) => volume);
+
+            // ✅ GUARDAR DATOS COMPLETOS Y DE DISPLAY POR SEPARADO
             setChartData({
                 labels: processedLabels,
-                prices: reversedPrices.map(([, price]) => price),
-                volumes: reversedVolumes.map(([, volume]) => volume)
+                prices,
+                volumes,
+                // ✅ NUEVO: Guardar datos completos para indicadores
+                allPricesForIndicators: allPrices.map(([, price]) => price),
+                displayStartIndex: displayStartIndex
             });
 
-            // CREAR DATOS ESPECÍFICOS PARA VOLUMEN CHART
+            // ✅ CREAR DATOS ESPECÍFICOS PARA VOLUMEN CHART - AZUL ORIGINAL
             setVolumeChartData({
                 labels: processedLabels,
                 datasets: [{
                     label: 'Volumen 24h',
-                    data: reversedVolumes.map(([, volume]) => volume),
-                    backgroundColor: reversedVolumes.map((_, index) => {
-                        const alpha = 0.3 + (index / reversedVolumes.length) * 0.4;
-                        return `rgba(99, 102, 241, ${alpha})`;
+                    data: volumes,
+                    backgroundColor: volumes.map((_, index) => {
+                        const alpha = 0.3 + (index / volumes.length) * 0.4;
+                        return `rgba(99, 102, 241, ${alpha})`; // ✅ AZUL ORIGINAL
                     }),
-                    borderColor: 'rgba(99, 102, 241, 0.8)',
+                    borderColor: 'rgba(99, 102, 241, 0.8)', // ✅ AZUL ORIGINAL
                     borderWidth: 1,
                     borderRadius: 4,
                 }]
             });
 
-            // CARGAR MÁS DATOS HISTÓRICOS PARA INDICADORES (200 días para mayor precisión)
-            const indicatorDays = Math.max(days + 200, 250); // Mínimo 250 días para indicadores precisos
-            const ohlc = await fetchOHLC(indicatorDays);
-            setOhlcData(ohlc);
+            // ✅ ELIMINAR ESTAS LÍNEAS - Ya no necesitamos fetchOHLC
+            // const indicatorDays = Math.max(days + 200, 250);
+            // const ohlc = await fetchOHLC(indicatorDays);
+            // setOhlcData(ohlc);
 
         } catch (err) {
             console.error('Error cargando datos', err);
@@ -143,7 +200,7 @@ const Market: React.FC = () => {
 
     const calculateEMA = (prices: number[], period: number): number[] => {
         const k = 2 / (period + 1);
-        let ema: number[] = [];
+        const ema: number[] = [];
         ema[0] = prices[0];
         for (let i = 1; i < prices.length; i++) {
             ema[i] = prices[i] * k + ema[i - 1] * (1 - k);
@@ -197,20 +254,27 @@ const Market: React.FC = () => {
         return { macdLine, signalLine, histogram };
     };
 
-    // COMPONENTE DE LEYENDA
-    const Legend = ({ items }: { items: Array<{ color: string; label: string; description: string }> }) => (
+    // ✅ COMPONENTE DE LEYENDA MEJORADA CON MÁS INFORMACIÓN
+    const Legend = ({ items }: { items: Array<{ color: string; label: string; description: string; usage?: string }> }) => (
         <div className="bg-gray-700/50 rounded-lg p-4 mt-4">
-            <h4 className="text-white font-semibold mb-3">Leyenda</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <h4 className="text-white font-semibold mb-3">
+                Interpretación de Indicadores
+            </h4>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {items.map((item, index) => (
-                    <div key={index} className="flex items-start space-x-3">
+                    <div key={index} className="flex items-start space-x-3 p-3 bg-gray-600/30 rounded-lg">
                         <div
                             className="w-4 h-3 rounded-sm mt-1 flex-shrink-0"
                             style={{ backgroundColor: item.color }}
                         ></div>
-                        <div>
+                        <div className="flex-1">
                             <span className="text-white text-sm font-medium">{item.label}</span>
-                            <p className="text-gray-400 text-xs mt-1">{item.description}</p>
+                            <p className="text-gray-300 text-xs mt-1 leading-relaxed">{item.description}</p>
+                            {item.usage && (
+                                <p className="text-blue-300 text-xs mt-2 font-medium">
+                                    {item.usage}
+                                </p>
+                            )}
                         </div>
                     </div>
                 ))}
@@ -219,171 +283,151 @@ const Market: React.FC = () => {
     );
 
     const renderIndicators = () => {
-        if (!ohlcData || ohlcData.length < 200) {
+        // ✅ DEBUG: Verificar qué datos tienes disponibles
+        console.log('[INDICATORS DEBUG] Renderizando indicadores:', {
+            chartData: !!chartData,
+            prices: chartData?.prices?.length || 0,
+            labels: chartData?.labels?.length || 0,
+            selectedInterval: selectedInterval,
+            chartDataExists: !!chartData,
+            pricesExists: !!chartData?.prices
+        });
+
+        // ✅ REDUCIR REQUISITO MÍNIMO Y DAR MÁS INFO
+        if (!chartData || !chartData.prices) {
             return (
                 <div className="bg-gray-800 rounded-lg p-8 border border-gray-700 text-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
-                    <p className="text-gray-400">Cargando datos históricos para indicadores...</p>
-                    <p className="text-gray-500 text-sm mt-2">Necesitamos más datos para cálculos precisos</p>
+                    <p className="text-gray-400">Cargando datos para indicadores...</p>
+                    <p className="text-gray-500 text-sm mt-2">
+                        {!chartData ? 'Sin datos de gráfico' : 'Sin datos de precios'}
+                    </p>
                 </div>
             );
         }
 
-        // ✅ NUEVA LÓGICA BASADA EN FECHAS REALES, NO EN ÍNDICES FIJOS
-
-        // Usar todos los datos para cálculos
-        const allCloses = ohlcData.map(d => d.close);
-
-        // Calcular indicadores con todos los datos históricos
-        const rsi = calculateRSI(allCloses);
-        const { upper, lower, middle } = calculateBollinger(allCloses);
-        const ema9 = calculateEMA(allCloses, 9);
-        const ema21 = calculateEMA(allCloses, 21);
-        const ema50 = calculateEMA(allCloses, 50);
-        const { macdLine, signalLine, histogram } = calculateMACD(allCloses);
-
-        // ✅ FILTRAR POR FECHAS REALES CON DATOS EXTENDIDOS PARA CÁLCULOS PRECISOS
-        const now = new Date();
-        let cutoffDate: Date;
-        let extendedCutoffDate: Date; // Fecha extendida para cálculos internos
-        let labelFormat: Intl.DateTimeFormatOptions;
-        let maxPoints = ohlcData.length; // Por defecto, todos los puntos
-
-        switch (selectedInterval) {
-            case '1h':
-                cutoffDate = new Date(now.getTime() - (2 * 24 * 60 * 60 * 1000)); // Últimas 48 horas
-                extendedCutoffDate = new Date(now.getTime() - (25 * 24 * 60 * 60 * 1000)); // 25 días atrás para cálculos
-                labelFormat = { hour: '2-digit', minute: '2-digit', hour12: false };
-                maxPoints = 50;
-                break;
-            case '1d':
-                cutoffDate = new Date(now.getTime() - (3 * 24 * 60 * 60 * 1000)); // Últimas 72 horas
-                extendedCutoffDate = new Date(now.getTime() - (28 * 24 * 60 * 60 * 1000)); // 28 días atrás para cálculos
-                labelFormat = { hour: '2-digit', minute: '2-digit', hour12: false };
-                maxPoints = 80;
-                break;
-            case '7d':
-                cutoffDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000)); // Últimos 7 días
-                extendedCutoffDate = new Date(now.getTime() - (35 * 24 * 60 * 60 * 1000)); // 35 días atrás para cálculos
-                labelFormat = { weekday: 'short', day: 'numeric', month: 'short' };
-                maxPoints = 170;
-                break;
-            case '1m':
-                cutoffDate = new Date(now.getTime() - (31 * 24 * 60 * 60 * 1000)); // Últimos 31 días
-                extendedCutoffDate = new Date(now.getTime() - (65 * 24 * 60 * 60 * 1000)); // 65 días atrás para cálculos
-                labelFormat = { day: 'numeric', month: 'short' };
-                maxPoints = 200;
-                break;
-            case '6m':
-                cutoffDate = new Date(now.getTime() - (180 * 24 * 60 * 60 * 1000)); // Últimos 180 días
-                extendedCutoffDate = new Date(now.getTime() - (230 * 24 * 60 * 60 * 1000)); // 230 días atrás para cálculos
-                labelFormat = { day: 'numeric', month: 'short' };
-                maxPoints = 200;
-                break;
-            default:
-                cutoffDate = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
-                extendedCutoffDate = new Date(now.getTime() - (35 * 24 * 60 * 60 * 1000));
-                labelFormat = { day: 'numeric', month: 'short' };
-                maxPoints = 170;
+        if (chartData.prices.length < 15) { // ✅ REDUCIDO A 15 (suficiente para RSI)
+            return (
+                <div className="bg-gray-800 rounded-lg p-8 border border-gray-700 text-center">
+                    <p className="text-yellow-400">⚠️ Datos insuficientes para indicadores</p>
+                    <p className="text-gray-500 text-sm mt-2">
+                        Tenemos {chartData.prices.length} puntos, necesitamos al menos 20
+                    </p>
+                    <p className="text-gray-500 text-xs mt-1">
+                        Intervalo: {selectedInterval} | Etiquetas: {chartData.labels.length}
+                    </p>
+                    <button
+                        onClick={() => {
+                            console.log('📊 Full chartData debug:', chartData);
+                        }}
+                        className="mt-3 px-4 py-2 bg-blue-600 text-white rounded text-sm"
+                    >
+                        Debug en consola
+                    </button>
+                </div>
+            );
         }
 
-        // ✅ CREAR ÍNDICES EXTENDIDOS PARA CÁLCULOS INTERNOS
-        const extendedIndices: number[] = [];
-        const extendedCutoffTimestamp = extendedCutoffDate.getTime() / 1000;
+        // ✅ USAR DATOS COMPLETOS PARA CALCULAR INDICADORES
+        const allPricesForCalculation = chartData.allPricesForIndicators || chartData.prices;
+        const displayStartIndex = chartData.displayStartIndex || 0;
 
-        for (let i = 0; i < ohlcData.length; i++) {
-            if (ohlcData[i].time >= extendedCutoffTimestamp) {
-                extendedIndices.push(i);
-            }
-        }
+        // ✅ USAR LOS DATOS QUE YA FUNCIONAN (chartData)
+        const allPrices = chartData.prices; // Solo para mostrar
+        const allLabels = chartData.labels;
 
-        // ✅ CALCULAR INDICADORES CON DATOS EXTENDIDOS
-        const extendedCloses = extendedIndices.map(i => allCloses[i]);
-        const extendedRsi = extendedIndices.map(i => rsi[i]);
-        const extendedUpper = extendedIndices.map(i => upper[i]);
-        const extendedLower = extendedIndices.map(i => lower[i]);
-        const extendedMiddle = extendedIndices.map(i => middle[i]);
+        // ✅ CALCULAR INDICADORES CON DATOS COMPLETOS (incluyendo calentamiento)
+        const rsi = calculateRSI(allPricesForCalculation);
+        const { upper, lower, middle } = calculateBollinger(allPricesForCalculation);
+        const ema9 = calculateEMA(allPricesForCalculation, 9);
+        const ema21 = calculateEMA(allPricesForCalculation, 21);
+        const ema50 = calculateEMA(allPricesForCalculation, 50);
+        const { macdLine, signalLine, histogram } = calculateMACD(allPricesForCalculation);
 
-        // ✅ FILTRAR DATOS PARA VISUALIZACIÓN (SOLO EL PERÍODO SOLICITADO)
-        const visibleIndices: number[] = [];
-        const cutoffTimestamp = cutoffDate.getTime() / 1000;
+        // ✅ EXTRAER SOLO LA PARTE VISIBLE (sin período de calentamiento)
+        const visiblePrices = allPrices;
+        const visibleLabels = allLabels;
+        const visibleRsi = rsi.slice(displayStartIndex);
+        const visibleUpper = upper.slice(displayStartIndex);
+        const visibleLower = lower.slice(displayStartIndex);
+        const visibleMiddle = middle.slice(displayStartIndex);
+        const visibleEma9 = ema9.slice(displayStartIndex);
+        const visibleEma21 = ema21.slice(displayStartIndex);
+        const visibleEma50 = ema50.slice(displayStartIndex);
+        const visibleMacd = macdLine.slice(displayStartIndex);
+        const visibleSignal = signalLine.slice(displayStartIndex);
+        const visibleHistogram = histogram.slice(displayStartIndex);
 
-        for (let i = 0; i < extendedIndices.length; i++) {
-            const originalIndex = extendedIndices[i];
-            if (ohlcData[originalIndex].time >= cutoffTimestamp) {
-                visibleIndices.push(i); // Usar índice relativo en el array extendido
-            }
-        }
+        // ✅ SIMPLE LOG: Solo mostrar actualización
+        const lastDate = visibleLabels[visibleLabels.length - 1];
+        console.log(`[BITCOIN INDICATORS] Actualizado hasta: ${lastDate} | Intervalo: ${selectedInterval} | Puntos: ${visiblePrices.length}`);
 
-        // ✅ SI HAY DEMASIADOS PUNTOS, HACER SAMPLING INTELIGENTE
-        let finalVisibleIndices = visibleIndices;
-        if (visibleIndices.length > maxPoints) {
-            finalVisibleIndices = [];
-            const step = Math.ceil(visibleIndices.length / maxPoints);
-            for (let i = 0; i < visibleIndices.length; i += step) {
-                finalVisibleIndices.push(visibleIndices[i]);
-            }
-        }
+        // ✅ DETERMINAR TENDENCIA PARA COLORES
+        const isUpTrend = visiblePrices.length > 1 &&
+            visiblePrices[visiblePrices.length - 1] > visiblePrices[0];
+        const priceColor = isUpTrend ? '#10b981' : '#ef4444';
 
-        // ✅ EXTRAER DATOS FINALES PARA VISUALIZACIÓN
-        const visibleCloses = finalVisibleIndices.map(i => extendedCloses[i]);
-        const visibleRsi = finalVisibleIndices.map(i => extendedRsi[i]);
-        const visibleUpper = finalVisibleIndices.map(i => extendedUpper[i]);
-        const visibleLower = finalVisibleIndices.map(i => extendedLower[i]);
-        const visibleMiddle = finalVisibleIndices.map(i => extendedMiddle[i]);
-
-        // Para EMAs y MACD, usar los índices originales (no extendidos)
-        const originalVisibleIndices = finalVisibleIndices.map(i => extendedIndices[i]);
-        const visibleEma9 = originalVisibleIndices.map(i => ema9[i]);
-        const visibleEma21 = originalVisibleIndices.map(i => ema21[i]);
-        const visibleEma50 = originalVisibleIndices.map(i => ema50[i]);
-        const visibleMacd = originalVisibleIndices.map(i => macdLine[i]);
-        const visibleSignal = originalVisibleIndices.map(i => signalLine[i]);
-        const visibleHistogram = originalVisibleIndices.map(i => histogram[i]);
-
-        // ✅ GENERAR ETIQUETAS USANDO LOS ÍNDICES ORIGINALES
-        const labels = originalVisibleIndices.map(i => {
-            const date = new Date(ohlcData[i].time * 1000);
-            return date.toLocaleDateString('es-ES', labelFormat);
-        });
-
-        // Debug para verificar el rango de fechas
-        const firstDate = originalVisibleIndices.length > 0 ? new Date(ohlcData[originalVisibleIndices[0]].time * 1000) : null;
-        const lastDate = originalVisibleIndices.length > 0 ? new Date(ohlcData[originalVisibleIndices[originalVisibleIndices.length - 1]].time * 1000) : null;
-        console.log(`[DEBUG] ${selectedInterval}: ${labels.length} puntos desde ${firstDate?.toLocaleDateString('es-ES')} hasta ${lastDate?.toLocaleDateString('es-ES')}`);
-        console.log(`[DEBUG] Datos extendidos usados para cálculos: ${extendedCloses.length} puntos`);
-
-        // 🔄 INVERTIR EL ORDEN DEL EJE X PARA INDICADORES
-        const reversedLabels = [...labels].reverse();
-        const reversedVisibleCloses = [...visibleCloses].reverse();
-        const reversedVisibleRsi = [...visibleRsi].reverse();
-        const reversedVisibleUpper = [...visibleUpper].reverse();
-        const reversedVisibleLower = [...visibleLower].reverse();
-        const reversedVisibleMiddle = [...visibleMiddle].reverse();
-        const reversedVisibleEma9 = [...visibleEma9].reverse();
-        const reversedVisibleEma21 = [...visibleEma21].reverse();
-        const reversedVisibleEma50 = [...visibleEma50].reverse();
-        const reversedVisibleMacd = [...visibleMacd].reverse();
-        const reversedVisibleSignal = [...visibleSignal].reverse();
-        const reversedVisibleHistogram = [...visibleHistogram].reverse();
+        // ✅ NO INVERTIR - Mantener orden cronológico natural (pasado → presente)
+        const finalLabels = visibleLabels; // izquierda = pasado, derecha = presente
+        const finalPrices = visiblePrices;
+        const finalRsi = visibleRsi;
+        const finalUpper = visibleUpper;
+        const finalLower = visibleLower;
+        const finalMiddle = visibleMiddle;
+        const finalEma9 = visibleEma9;
+        const finalEma21 = visibleEma21;
+        const finalEma50 = visibleEma50;
+        const finalMacd = visibleMacd;
+        const finalSignal = visibleSignal;
+        const finalHistogram = visibleHistogram;
 
         return (
             <div className="space-y-8">
                 {/* Precio + Bollinger + EMAs */}
                 <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-                    <h3 className="text-white text-xl mb-3">Análisis de Precio y Tendencias</h3>
-                    <p className="text-gray-400 mb-4">
-                        Combinación de precio con medias móviles y bandas de Bollinger para análisis de tendencia y volatilidad.
-                    </p>
+                    <div className="mb-6">
+                        <h3 className="text-white text-xl mb-3 flex items-center">
+                            <TrendingUp className="w-5 h-5 mr-2 text-green-400" />
+                            Análisis de Precio y Tendencias
+                        </h3>
+                        <div className="bg-gray-700/30 rounded-lg p-4 mb-4">
+                            <h4 className="text-blue-300 font-semibold mb-2">¿Qué estás viendo?</h4>
+                            <p className="text-gray-300 text-sm leading-relaxed mb-3">
+                                Este gráfico combina el <strong className="text-white">precio de Bitcoin</strong> con tres herramientas de análisis técnico fundamentales
+                                para identificar tendencias y puntos de entrada/salida óptimos.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                <div>
+                                    <h5 className="text-orange-300 font-medium mb-1 flex items-center">
+                                        Medias Móviles (EMAs)
+                                    </h5>
+                                    <p className="text-gray-400">
+                                        Filtran el ruido y muestran la dirección real de la tendencia.
+                                        Cuando el precio está por encima = tendencia alcista.
+                                    </p>
+                                </div>
+                                <div>
+                                    <h5 className="text-blue-300 font-medium mb-1 flex items-center">
+                                        Bandas de Bollinger
+                                    </h5>
+                                    <p className="text-gray-400">
+                                        Miden la volatilidad. Bandas estrechas = poca volatilidad (próxima explosión).
+                                        Precio tocando bandas = posible rebote.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <PriceChart
                         chartData={{
-                            labels: reversedLabels,
+                            labels: finalLabels,
                             datasets: [
                                 {
                                     label: 'Precio',
-                                    data: reversedVisibleCloses,
-                                    borderColor: '#10b981',
-                                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                    data: finalPrices,
+                                    borderColor: priceColor,
+                                    backgroundColor: `${priceColor}20`,
                                     borderWidth: 3,
                                     tension: 0.3,
                                     fill: false,
@@ -391,7 +435,7 @@ const Market: React.FC = () => {
                                 },
                                 {
                                     label: 'EMA 9',
-                                    data: reversedVisibleEma9,
+                                    data: finalEma9,
                                     borderColor: '#f59e0b',
                                     fill: false,
                                     borderWidth: 2,
@@ -400,7 +444,7 @@ const Market: React.FC = () => {
                                 },
                                 {
                                     label: 'EMA 21',
-                                    data: reversedVisibleEma21,
+                                    data: finalEma21,
                                     borderColor: '#6366f1',
                                     fill: false,
                                     borderWidth: 2,
@@ -409,7 +453,7 @@ const Market: React.FC = () => {
                                 },
                                 {
                                     label: 'EMA 50',
-                                    data: reversedVisibleEma50,
+                                    data: finalEma50,
                                     borderColor: '#8b5cf6',
                                     fill: false,
                                     borderWidth: 2,
@@ -418,7 +462,7 @@ const Market: React.FC = () => {
                                 },
                                 {
                                     label: 'Bollinger Superior',
-                                    data: reversedVisibleUpper,
+                                    data: finalUpper,
                                     borderColor: '#3b82f6',
                                     fill: false,
                                     borderDash: [5, 5],
@@ -428,7 +472,7 @@ const Market: React.FC = () => {
                                 },
                                 {
                                     label: 'Bollinger Media',
-                                    data: reversedVisibleMiddle,
+                                    data: finalMiddle,
                                     borderColor: '#64748b',
                                     fill: false,
                                     borderDash: [2, 2],
@@ -438,7 +482,7 @@ const Market: React.FC = () => {
                                 },
                                 {
                                     label: 'Bollinger Inferior',
-                                    data: reversedVisibleLower,
+                                    data: finalLower,
                                     borderColor: '#ef4444',
                                     fill: false,
                                     borderDash: [5, 5],
@@ -450,34 +494,97 @@ const Market: React.FC = () => {
                         }}
                         selectedInterval={selectedInterval}
                         onIntervalChange={setSelectedInterval}
-                        intervals={INTERVALS}
+                        intervals={['7d', '1m', '6m']} // ✅ SOLO INTERVALOS CON SUFICIENTES DATOS
                         loading={false}
                         formatCurrency={(n: number) => `${n.toLocaleString()}`}
                     />
 
                     <Legend items={[
-                        { color: '#10b981', label: 'Precio', description: 'Precio actual de Bitcoin' },
-                        { color: '#f59e0b', label: 'EMA 9', description: 'Media móvil rápida (9 días)' },
-                        { color: '#6366f1', label: 'EMA 21', description: 'Media móvil media (21 días)' },
-                        { color: '#8b5cf6', label: 'EMA 50', description: 'Media móvil lenta (50 días)' },
-                        { color: '#3b82f6', label: 'Banda Superior', description: 'Límite superior de volatilidad' },
-                        { color: '#ef4444', label: 'Banda Inferior', description: 'Límite inferior de volatilidad' }
+                        {
+                            color: priceColor,
+                            label: 'Precio Bitcoin',
+                            description: 'Precio actual de Bitcoin en tiempo real',
+                            usage: 'Color verde = tendencia alcista, rojo = tendencia bajista'
+                        },
+                        {
+                            color: '#f59e0b',
+                            label: 'EMA 9 (Rápida)',
+                            description: 'Media móvil de 9 días - reacciona rápido a cambios de precio',
+                            usage: 'Precio por encima de EMA 9 = momentum alcista de corto plazo'
+                        },
+                        {
+                            color: '#6366f1',
+                            label: 'EMA 21 (Media)',
+                            description: 'Media móvil de 21 días - equilibrio entre velocidad y estabilidad',
+                            usage: 'Cruce EMA 9 por encima de EMA 21 = señal de compra potencial'
+                        },
+                        {
+                            color: '#8b5cf6',
+                            label: 'EMA 50 (Lenta)',
+                            description: 'Media móvil de 50 días - tendencia de largo plazo',
+                            usage: 'Actúa como soporte/resistencia dinámico importante'
+                        },
+                        {
+                            color: '#3b82f6',
+                            label: 'Banda Superior',
+                            description: 'Límite superior de volatilidad (sobrevalorado potencial)',
+                            usage: 'Precio cerca de banda superior = posible resistencia/venta'
+                        },
+                        {
+                            color: '#ef4444',
+                            label: 'Banda Inferior',
+                            description: 'Límite inferior de volatilidad (infravalorado potencial)',
+                            usage: 'Precio cerca de banda inferior = posible soporte/compra'
+                        }
                     ]} />
                 </div>
 
                 {/* RSI */}
                 <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-                    <h3 className="text-white text-xl mb-3">RSI - Índice de Fuerza Relativa</h3>
-                    <p className="text-gray-400 mb-4">
-                        Mide la velocidad y cambio de los movimientos de precios. Valores extremos indican posibles puntos de reversión.
-                    </p>
+                    <div className="mb-6">
+                        <h3 className="text-white text-xl mb-3 flex items-center">
+                            <Zap className="w-5 h-5 mr-2 text-yellow-400" />
+                            RSI - Índice de Fuerza Relativa
+                        </h3>
+                        <div className="bg-gray-700/30 rounded-lg p-4 mb-4">
+                            <h4 className="text-yellow-300 font-semibold mb-2">¿Qué es el RSI?</h4>
+                            <p className="text-gray-300 text-sm leading-relaxed mb-3">
+                                El RSI mide la <strong className="text-white">velocidad y intensidad</strong> de los cambios de precio.
+                                Oscila entre 0 y 100, ayudando a identificar cuándo Bitcoin está "sobrevalorado" o "infravalorado" temporalmente.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                <div className="bg-red-500/20 rounded p-3">
+                                    <h5 className="text-red-300 font-medium mb-1">RSI &gt; 70</h5>
+                                    <p className="text-gray-400">
+                                        <strong>Sobrecompra:</strong> Bitcoin puede estar sobrevalorado.
+                                        Posible corrección a la baja.
+                                    </p>
+                                </div>
+                                <div className="bg-gray-500/20 rounded p-3">
+                                    <h5 className="text-gray-300 font-medium mb-1">RSI 30-70</h5>
+                                    <p className="text-gray-400">
+                                        <strong>Zona neutral:</strong> Sin señales extremas.
+                                        Seguir otras tendencias.
+                                    </p>
+                                </div>
+                                <div className="bg-green-500/20 rounded p-3">
+                                    <h5 className="text-green-300 font-medium mb-1">RSI &lt; 30</h5>
+                                    <p className="text-gray-400">
+                                        <strong>Sobreventa:</strong> Bitcoin puede estar infravalorado.
+                                        Posible rebote al alza.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <PriceChart
                         chartData={{
-                            labels: reversedLabels,
+                            labels: finalLabels,
                             datasets: [
                                 {
                                     label: 'RSI',
-                                    data: reversedVisibleRsi,
+                                    data: finalRsi,
                                     borderColor: '#f59e0b',
                                     backgroundColor: 'rgba(245, 158, 11, 0.2)',
                                     borderWidth: 3,
@@ -487,7 +594,7 @@ const Market: React.FC = () => {
                                 },
                                 {
                                     label: 'Sobrecompra (70)',
-                                    data: new Array(reversedLabels.length).fill(70),
+                                    data: new Array(finalLabels.length).fill(70),
                                     borderColor: '#ef4444',
                                     borderDash: [8, 4],
                                     borderWidth: 2,
@@ -496,7 +603,7 @@ const Market: React.FC = () => {
                                 },
                                 {
                                     label: 'Sobreventa (30)',
-                                    data: new Array(reversedLabels.length).fill(30),
+                                    data: new Array(finalLabels.length).fill(30),
                                     borderColor: '#10b981',
                                     borderDash: [8, 4],
                                     borderWidth: 2,
@@ -507,31 +614,88 @@ const Market: React.FC = () => {
                         }}
                         selectedInterval={selectedInterval}
                         onIntervalChange={setSelectedInterval}
-                        intervals={INTERVALS}
+                        intervals={['7d', '1m', '6m']} // ✅ SOLO INTERVALOS CON SUFICIENTES DATOS
                         loading={false}
                         formatCurrency={(n: number) => n.toFixed(1)}
                     />
 
                     <Legend items={[
-                        { color: '#f59e0b', label: 'RSI', description: 'Fuerza relativa del precio (0-100)' },
-                        { color: '#ef4444', label: 'Sobrecompra', description: 'RSI > 70: posible venta' },
-                        { color: '#10b981', label: 'Sobreventa', description: 'RSI < 30: posible compra' }
+                        {
+                            color: '#f59e0b',
+                            label: 'RSI',
+                            description: 'Índice de fuerza relativa del precio (escala 0-100)',
+                            usage: 'Valores extremos indican posibles puntos de reversión de tendencia'
+                        },
+                        {
+                            color: '#ef4444',
+                            label: 'Zona Sobrecompra (70)',
+                            description: 'Nivel crítico donde Bitcoin puede estar sobrevalorado',
+                            usage: 'RSI > 70 = considerar venta o esperar corrección bajista'
+                        },
+                        {
+                            color: '#10b981',
+                            label: 'Zona Sobreventa (30)',
+                            description: 'Nivel crítico donde Bitcoin puede estar infravalorado',
+                            usage: 'RSI < 30 = considerar compra o esperar rebote alcista'
+                        }
                     ]} />
                 </div>
 
                 {/* MACD */}
                 <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-                    <h3 className="text-white text-xl mb-3">MACD - Convergencia/Divergencia de Medias Móviles</h3>
-                    <p className="text-gray-400 mb-4">
-                        Indica cambios en la fuerza, dirección, momentum y duración de una tendencia. Los cruces pueden señalar puntos de entrada/salida.
-                    </p>
+                    <div className="mb-6">
+                        <h3 className="text-white text-xl mb-3 flex items-center">
+                            <Activity className="w-5 h-5 mr-2 text-blue-400" />
+                            MACD - Convergencia/Divergencia de Medias Móviles
+                        </h3>
+                        <div className="bg-gray-700/30 rounded-lg p-4 mb-4">
+                            <h4 className="text-green-300 font-semibold mb-2">¿Qué es el MACD?</h4>
+                            <p className="text-gray-300 text-sm leading-relaxed mb-3">
+                                El MACD es como un <strong className="text-white">"detector de cambios de tendencia"</strong>.
+                                Combina medias móviles rápidas y lentas para anticipar cuándo Bitcoin puede cambiar de dirección.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                <div className="bg-green-500/20 rounded p-3">
+                                    <h5 className="text-green-300 font-medium mb-1 flex items-center">
+                                        <ArrowUp className="w-4 h-4 mr-1" />
+                                        Cruce Alcista
+                                    </h5>
+                                    <p className="text-gray-400">
+                                        <strong>MACD &gt; Señal:</strong> Posible inicio de tendencia alcista.
+                                        Momento de considerar compra.
+                                    </p>
+                                </div>
+                                <div className="bg-red-500/20 rounded p-3">
+                                    <h5 className="text-red-300 font-medium mb-1 flex items-center">
+                                        <ArrowDown className="w-4 h-4 mr-1" />
+                                        Cruce Bajista
+                                    </h5>
+                                    <p className="text-gray-400">
+                                        <strong>MACD &lt; Señal:</strong> Posible inicio de tendencia bajista.
+                                        Momento de considerar venta.
+                                    </p>
+                                </div>
+                                <div className="bg-blue-500/20 rounded p-3">
+                                    <h5 className="text-blue-300 font-medium mb-1 flex items-center">
+                                        <BarChart3 className="w-4 h-4 mr-1" />
+                                        Histograma
+                                    </h5>
+                                    <p className="text-gray-400">
+                                        <strong>Diferencia MACD-Señal:</strong> Mide la fuerza del momentum.
+                                        Barras crecientes = momentum creciente.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <PriceChart
                         chartData={{
-                            labels: reversedLabels,
+                            labels: finalLabels,
                             datasets: [
                                 {
                                     label: 'MACD',
-                                    data: reversedVisibleMacd,
+                                    data: finalMacd,
                                     borderColor: '#10b981',
                                     borderWidth: 3,
                                     fill: false,
@@ -540,7 +704,7 @@ const Market: React.FC = () => {
                                 },
                                 {
                                     label: 'Señal',
-                                    data: reversedVisibleSignal,
+                                    data: finalSignal,
                                     borderColor: '#ef4444',
                                     borderWidth: 3,
                                     fill: false,
@@ -549,7 +713,7 @@ const Market: React.FC = () => {
                                 },
                                 {
                                     label: 'Histograma',
-                                    data: reversedVisibleHistogram,
+                                    data: finalHistogram,
                                     backgroundColor: 'rgba(99, 102, 241, 0.3)',
                                     borderColor: '#6366f1',
                                     borderWidth: 1,
@@ -559,15 +723,30 @@ const Market: React.FC = () => {
                         }}
                         selectedInterval={selectedInterval}
                         onIntervalChange={setSelectedInterval}
-                        intervals={INTERVALS}
+                        intervals={['7d', '1m', '6m']} // ✅ SOLO INTERVALOS CON SUFICIENTES DATOS
                         loading={false}
                         formatCurrency={(n: number) => n.toFixed(2)}
                     />
 
                     <Legend items={[
-                        { color: '#10b981', label: 'MACD', description: 'Línea principal del MACD' },
-                        { color: '#ef4444', label: 'Señal', description: 'Línea de señal (EMA 9 del MACD)' },
-                        { color: '#6366f1', label: 'Histograma', description: 'Diferencia entre MACD y Señal' }
+                        {
+                            color: '#10b981',
+                            label: 'MACD (Línea Principal)',
+                            description: 'Diferencia entre EMA rápida (12) y EMA lenta (26)',
+                            usage: 'Cuando cruza por encima de la línea de señal = posible tendencia alcista'
+                        },
+                        {
+                            color: '#ef4444',
+                            label: 'Línea de Señal',
+                            description: 'EMA de 9 períodos del MACD - suaviza las señales',
+                            usage: 'Actúa como filtro para confirmar cambios de tendencia'
+                        },
+                        {
+                            color: '#6366f1',
+                            label: 'Histograma',
+                            description: 'Diferencia entre MACD y Señal - mide fuerza del momentum',
+                            usage: 'Barras por encima de 0 = momentum alcista, por debajo = bajista'
+                        }
                     ]} />
                 </div>
             </div>
@@ -585,6 +764,14 @@ const Market: React.FC = () => {
         }
 
         if (activeTab === 'price') {
+            // ✅ DETERMINAR TENDENCIA PARA COLORES DINÁMICOS EN GRÁFICO DE PRECIO
+            const isUpTrend = chartData && chartData.prices.length > 1
+                ? chartData.prices[chartData.prices.length - 1] > chartData.prices[0]
+                : true;
+
+            const priceColor = isUpTrend ? '#10b981' : '#ef4444';
+            const priceGradient = createDynamicGradient(isUpTrend);
+
             return (
                 <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
                     <PriceChart
@@ -593,8 +780,8 @@ const Market: React.FC = () => {
                             datasets: [{
                                 label: 'Precio BTC (USD)',
                                 data: chartData?.prices || [],
-                                borderColor: '#10b981',
-                                backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                                borderColor: priceColor, // ✅ COLOR DINÁMICO
+                                backgroundColor: priceGradient, // ✅ GRADIENTE DINÁMICO
                                 borderWidth: 3,
                                 fill: true,
                                 tension: 0.4,
@@ -605,7 +792,7 @@ const Market: React.FC = () => {
                         onIntervalChange={setSelectedInterval}
                         intervals={INTERVALS}
                         loading={loading}
-                        formatCurrency={(n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
+                        formatCurrency={(n: number) => `${n.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
                     />
                 </div>
             );
@@ -636,10 +823,10 @@ const Market: React.FC = () => {
             <div className="space-y-6">
                 {/* Header */}
                 <div className="mb-6">
-                    <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
+                    <h1 className="text-3xl md:text-4xl font-bold text-white mb-3">
                         Análisis de Mercado
                     </h1>
-                    <p className="text-gray-400">
+                    <p className="text-gray-400 text-lg">
                         Análisis técnico completo de Bitcoin con indicadores avanzados
                     </p>
                 </div>

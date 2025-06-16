@@ -77,7 +77,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <div className="p-3 md:p-4 border-b border-gray-700 flex items-center justify-between">
                     {!isCollapsed && (
                         <Link to="/" className="text-lg md:text-xl font-bold text-white truncate hover:text-blue-400 transition-colors">
-                            Bitcoin Predictor
+                            BitcoinInsight
                         </Link>
                     )}
 

@@ -1,12 +1,12 @@
 // src/components/PredictionCard.tsx
-// Conectado con datos reales de la API y soporte para altura uniforme
+// Conectado con datos reales de la API con horario español corregido
 
 import { useState, useEffect, useMemo } from 'react';
 import { fetchTomorrowPrediction } from '../utils/api';
 import type { LatestPredictionResponse, TomorrowPredictionResponse } from '../utils/api';
 
 interface PredictionCardProps {
-    className?: string; // ✅ Nueva prop para clases adicionales
+    className?: string;
 }
 
 const PredictionCard: React.FC<PredictionCardProps> = ({ className = "" }) => {
@@ -14,12 +14,19 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ className = "" }) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Calcula la fecha de mañana y la formatea en "D de M"
+    // Calcula la fecha de mañana en horario español y la formatea en "D de M"
     const tomorrowDate = useMemo(() => {
         const hoy = new Date();
-        hoy.setDate(hoy.getDate() + 1);
-        const opciones: Intl.DateTimeFormatOptions = { day: "numeric", month: "long" };
-        const [day, month] = hoy.toLocaleDateString("es-ES", opciones).split(" de ");
+        // Convertir a horario español
+        const hoyEspana = new Date(hoy.toLocaleString("en-US", { timeZone: "Europe/Madrid" }));
+        hoyEspana.setDate(hoyEspana.getDate() + 1);
+
+        const opciones: Intl.DateTimeFormatOptions = {
+            day: "numeric",
+            month: "long",
+            timeZone: "Europe/Madrid"
+        };
+        const [day, month] = hoyEspana.toLocaleDateString("es-ES", opciones).split(" de ");
         return `${day} de ${month}`; // e.g. "2 de Junio"
     }, []);
 
@@ -73,17 +80,33 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ className = "" }) => {
         return date.toLocaleDateString('es-ES', {
             day: 'numeric',
             month: 'short',
-            year: 'numeric'
+            year: 'numeric',
+            timeZone: 'Europe/Madrid'
         });
     };
 
     const formatDateTime = (dateStr: string): string => {
         const date = new Date(dateStr);
-        return date.toLocaleDateString('es-ES', {
+        return date.toLocaleString('es-ES', {
             day: 'numeric',
             month: 'short',
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
+            timeZone: 'Europe/Madrid',
+            hour12: false
+        });
+    };
+
+    // Función para obtener la hora actual en España
+    const getCurrentSpanishTime = (): string => {
+        const now = new Date();
+        return now.toLocaleString('es-ES', {
+            day: 'numeric',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'Europe/Madrid',
+            hour12: false
         });
     };
 
@@ -93,7 +116,7 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ className = "" }) => {
                 <h3 className="text-base md:text-lg lg:text-xl font-semibold text-white mb-3 md:mb-4">
                     Predicción para {tomorrowDate}
                 </h3>
-                {/* ✅ Loading state - Usa flex-1 para ocupar el espacio disponible */}
+                {/* Loading state - Usa flex-1 para ocupar el espacio disponible */}
                 <div className="flex-1 flex items-center justify-center">
                     <div className="text-center">
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto mb-3"></div>
@@ -110,11 +133,14 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ className = "" }) => {
                 <h3 className="text-base md:text-lg lg:text-xl font-semibold text-white mb-3 md:mb-4">
                     Predicción para {tomorrowDate}
                 </h3>
-                {/* ✅ Error state - Usa flex-1 para ocupar el espacio disponible */}
+                {/* Error state - Usa flex-1 para ocupar el espacio disponible */}
                 <div className="flex-1 flex items-center justify-center">
                     <div className="text-center text-gray-400">
                         <p className="text-sm md:text-base mb-2">
                             {error || 'La predicción para mañana todavía no está disponible'}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                            Hora actual: {getCurrentSpanishTime()} CET/CEST
                         </p>
                     </div>
                 </div>
@@ -140,7 +166,7 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ className = "" }) => {
                 )}
             </div>
 
-            {/* ✅ Contenido principal - Usa flex-1 para ocupar todo el espacio disponible */}
+            {/* Contenido principal - Usa flex-1 para ocupar todo el espacio disponible */}
             <div className="flex-1 flex flex-col">
                 {/* Dirección de la predicción */}
                 <div className="text-center mb-4 md:mb-6 flex-1 flex flex-col justify-center">
@@ -148,10 +174,10 @@ const PredictionCard: React.FC<PredictionCardProps> = ({ className = "" }) => {
                         {direction.icon} {direction.text}
                     </div>
                     <p className="text-xs md:text-sm text-gray-400">
-                        Predicción para mañana: {formatDate(pred.prediction_date)}
+                        Predicción para: {formatDate(pred.prediction_date)}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                        Generada: {formatDateTime(pred.created_at)}
+                        Generada: {formatDateTime(pred.created_at)} CET/CEST
                     </p>
                 </div>
 
