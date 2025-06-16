@@ -7,15 +7,24 @@ on:
   repository_dispatch:   # Allow triggering from external sources
     types: [run-bitcoin-prediction]
 
+# Permisos mínimos necesarios
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   predict:
     runs-on: ubuntu-latest
+    
+    # Timeout de seguridad (evita workflows colgados)
+    timeout-minutes: 30
+    
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
         
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@65d7f2d534ac1bc67fcd62888c5f4f3d2cb2b236 # v4.7.1
         with:
           python-version: '3.10'
           cache: 'pip'
@@ -25,37 +34,83 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           
-      - name: Configure credentials
+      - name: Validate environment variables
         run: |
-          echo '{
-            "SUPABASE_URL": "${{ secrets.SUPABASE_URL }}",
-            "SUPABASE_KEY": "${{ secrets.SUPABASE_KEY }}",
-            "GNEWS_API_KEY": "${{ secrets.GNEWS_API_KEY }}",
-            "THENEWS_API_KEY": "${{ secrets.THENEWS_API_KEY }}"
-          }' > config.json
+          python -c "
+          import os
+          import sys
           
-          # DEBUG: Verificar archivo
-          echo "=== Config file created ==="
-          ls -la config.json
-          echo "=== Config file content (masked) ==="
-          cat config.json | sed 's/".*"/"***"/g'
-          echo "=== End debug ==="
+          required_vars = [
+              'SUPABASE_URL', 
+              'SUPABASE_KEY', 
+              'GNEWS_API_KEY', 
+              'THENEWS_API_KEY'
+          ]
+          
+          missing_vars = [var for var in required_vars if not os.getenv(var)]
+          
+          if missing_vars:
+              print(f'❌ Missing required environment variables: {missing_vars}')
+              sys.exit(1)
+          else:
+              print('✅ All required environment variables are present')
+          "
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          GNEWS_API_KEY: ${{ secrets.GNEWS_API_KEY }}
+          THENEWS_API_KEY: ${{ secrets.THENEWS_API_KEY }}
           
       - name: Run prediction workflow
         run: python scripts/run_workflow.py --github-actions
         env:
+          # Secretos pasados como variables de entorno (seguro)
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          GNEWS_API_KEY: ${{ secrets.GNEWS_API_KEY }}
+          THENEWS_API_KEY: ${{ secrets.THENEWS_API_KEY }}
           HEALTHCHECK_WORKFLOW_COMPLETE: ${{ secrets.HEALTHCHECK_WORKFLOW_COMPLETE }}
           
-      - name: Upload logs
-        if: always()
-        uses: actions/upload-artifact@v4
+          # Variables adicionales útiles
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_SHA: ${{ github.sha }}
+          
+      - name: Upload logs on success
+        if: success()
+        uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
         with:
-          name: workflow-logs
+          name: workflow-logs-success-${{ github.run_id }}
           path: |
             *.log
             logs/
+          retention-days: 7
             
-      - name: Notify on failure
+      - name: Upload logs on failure
         if: failure()
+        uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
+        with:
+          name: workflow-logs-failure-${{ github.run_id }}
+          path: |
+            *.log
+            logs/
+          retention-days: 30  # Mantener logs de errores más tiempo
+          
+      - name: Clean up sensitive files
+        if: always()
         run: |
-          echo "❌ Bitcoin prediction workflow failed! Check GitHub Actions for details."
+          # Limpiar cualquier archivo que pudiera contener datos sensibles
+          find . -name "*.json" -type f -exec shred -vfz -n 3 {} \; 2>/dev/null || true
+          find . -name "*.log" -type f -exec grep -l "password\|key\|secret\|token" {} \; | xargs shred -vfz -n 3 2>/dev/null || true
+          
+      - name: Report workflow status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "✅ Bitcoin prediction workflow completed successfully!"
+            echo "📊 Check the uploaded artifacts for detailed logs."
+          else
+            echo "❌ Bitcoin prediction workflow failed!"
+            echo "🔍 Check the uploaded failure logs and GitHub Actions for details."
+            echo "📝 Run ID: ${{ github.run_id }}"
+          fi

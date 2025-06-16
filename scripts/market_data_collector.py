@@ -34,35 +34,38 @@ logging.basicConfig(
 )
 logger = logging.getLogger("market_data")
 
-# Load config
-config_paths = ['config.json', '../config.json', './config.json']
-SUPABASE_URL = None
-SUPABASE_KEY = None
+# PRIORIDAD 1: Variables de entorno (GitHub Actions, producción)
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 
-for config_path in config_paths:
+# PRIORIDAD 2: Fallback a config.json (solo desarrollo local)
+if not SUPABASE_URL or not SUPABASE_KEY:
+    logger.info("🔄 Environment variables missing, trying config.json fallback...")
+    
     try:
-        with open(config_path, 'r') as f:
+        with open('config.json', 'r') as f:
             config = json.load(f)
-        SUPABASE_URL = config.get('SUPABASE_URL')
-        SUPABASE_KEY = config.get('SUPABASE_KEY')
+        
+        # Solo usar del archivo si no está en variables de entorno
+        SUPABASE_URL = SUPABASE_URL or config.get('SUPABASE_URL')
+        SUPABASE_KEY = SUPABASE_KEY or config.get('SUPABASE_KEY')
+        
         if SUPABASE_URL and SUPABASE_KEY:
-            logger.info(f"✅ Config loaded from {config_path}")
-            break
+            logger.info("✅ Config loaded from config.json")
+        
     except FileNotFoundError:
-        continue
+        logger.warning("⚠️ No config.json found, using only environment variables")
+    except json.JSONDecodeError:
+        logger.error("❌ Invalid JSON in config.json")
 
-# Fallback to environment variables
+# Validar credenciales antes de continuar
 if not SUPABASE_URL or not SUPABASE_KEY:
-    SUPABASE_URL = os.environ.get("SUPABASE_URL")
-    SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-    if SUPABASE_URL and SUPABASE_KEY:
-        logger.info("✅ Config loaded from environment variables")
-
-# Validate credentials before proceeding
-if not SUPABASE_URL or not SUPABASE_KEY:
-    logger.error("❌ Missing Supabase credentials. Please set SUPABASE_URL and SUPABASE_KEY")
-    logger.error("   Either as GitHub secrets (environment variables) or in config.json")
+    logger.error("❌ Missing Supabase credentials")
+    logger.error("   Set SUPABASE_URL and SUPABASE_KEY as environment variables")
+    logger.error("   Or create config.json for local development")
     raise ValueError("Missing required Supabase credentials")
+
+logger.info("✅ Supabase configuration loaded successfully")
 
 TICKERS         = ["BTC-USD", "^IXIC"]  # No GLD needed
 LOOKBACK_BUFFER = 25  # Increased buffer for 20-day Bollinger Bands calculation

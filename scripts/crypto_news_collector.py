@@ -39,44 +39,43 @@ logging.basicConfig(
 )
 logger = logging.getLogger("news_sentiment")
 
-# Load config
-config_paths = ['config.json', '../config.json', './config.json']
-GNEWS_API_KEY = None
-THENEWS_API_KEY = None
-SUPABASE_URL = None
-SUPABASE_KEY = None
+# PRIORIDAD 1: Variables de entorno (GitHub Actions, producción)
+GNEWS_API_KEY = os.getenv('GNEWS_API_KEY')
+THENEWS_API_KEY = os.getenv('THENEWS_API_KEY') 
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 
-for config_path in config_paths:
-   try:
-       with open(config_path, 'r') as f:
-           config = json.load(f)
-       GNEWS_API_KEY = config.get('GNEWS_API_KEY')
-       THENEWS_API_KEY = config.get('THENEWS_API_KEY')
-       SUPABASE_URL = config.get('SUPABASE_URL')
-       SUPABASE_KEY = config.get('SUPABASE_KEY')
-       if SUPABASE_URL and SUPABASE_KEY:
-           logger.info(f"✅ Config loaded from {config_path}")
-           break
-   except FileNotFoundError:
-       continue
+# PRIORIDAD 2: Fallback a config.json (solo desarrollo local)
+if not all([GNEWS_API_KEY, THENEWS_API_KEY, SUPABASE_URL, SUPABASE_KEY]):
+    logger.info("🔄 Some environment variables missing, trying config.json fallback...")
+    
+    try:
+        with open('config.json', 'r') as f:
+            config = json.load(f)
+        
+        # Solo usar del archivo si no está en variables de entorno
+        GNEWS_API_KEY = GNEWS_API_KEY or config.get('GNEWS_API_KEY')
+        THENEWS_API_KEY = THENEWS_API_KEY or config.get('THENEWS_API_KEY')
+        SUPABASE_URL = SUPABASE_URL or config.get('SUPABASE_URL')
+        SUPABASE_KEY = SUPABASE_KEY or config.get('SUPABASE_KEY')
+        
+        logger.info("✅ Additional config loaded from config.json")
+        
+    except FileNotFoundError:
+        logger.warning("⚠️ No config.json found, using only environment variables")
+    except json.JSONDecodeError:
+        logger.error("❌ Invalid JSON in config.json")
 
-# Fallback to environment variables
-if not SUPABASE_URL or not SUPABASE_KEY or not GNEWS_API_KEY or not THENEWS_API_KEY:
-   GNEWS_API_KEY = GNEWS_API_KEY or os.environ.get("GNEWS_API_KEY")
-   THENEWS_API_KEY = THENEWS_API_KEY or os.environ.get("THENEWS_API_KEY")
-   SUPABASE_URL = SUPABASE_URL or os.environ.get("SUPABASE_URL")
-   SUPABASE_KEY = SUPABASE_KEY or os.environ.get("SUPABASE_KEY")
-   if SUPABASE_URL and SUPABASE_KEY:
-       logger.info("✅ Config loaded from environment variables")
-
-# Validate credentials before proceeding
+# Validar credenciales críticas
 if not SUPABASE_URL or not SUPABASE_KEY:
-   logger.error("❌ Missing Supabase credentials. Please set SUPABASE_URL and SUPABASE_KEY")
-   logger.error("   Either as GitHub secrets (environment variables) or in config.json")
-   raise ValueError("Missing required Supabase credentials")
+    logger.error("❌ Missing Supabase credentials")
+    logger.error("   Set SUPABASE_URL and SUPABASE_KEY as environment variables")
+    raise ValueError("Missing required Supabase credentials")
 
 if not GNEWS_API_KEY or not THENEWS_API_KEY:
-   logger.warning("⚠️ Missing news API credentials. Some features may not work properly")
+    logger.warning("⚠️ Missing news API credentials. Some features may not work properly")
+
+logger.info("✅ Configuration loaded successfully")
 
 # Constants
 SENTIMENT_MODEL    = "cardiffnlp/twitter-roberta-base-sentiment-latest"
