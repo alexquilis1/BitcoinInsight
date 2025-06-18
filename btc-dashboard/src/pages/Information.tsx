@@ -143,7 +143,7 @@ const Information: React.FC = () => {
                 {/* Header mejorado responsive */}
                 <div className="text-center mb-6 sm:mb-8">
                     <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-3">
-                        Bitcoin Predictor
+                        BitcoinInsight
                     </h1>
                     <p className="text-gray-400 text-base sm:text-lg max-w-3xl mx-auto px-2">
                         Sistema integral de predicción direccional de Bitcoin con análisis de mercado en tiempo real
