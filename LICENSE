@@ -1,21 +1,33 @@
-MIT License
+Licencia Personalizada
 
-Copyright (c) 2025 Alex Quilis Vila
+Copyright (c) 2025 Alex Quilis
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Términos y Condiciones
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+La redistribución y el uso en formas de código fuente y binario, con o sin modificación, están permitidos siempre que se cumplan las siguientes condiciones:
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+1. Atribución
+- Las redistribuciones del código fuente deben conservar el aviso de copyright anterior, esta lista de condiciones y la siguiente exención de responsabilidad.
+- Las redistribuciones en forma binaria deben reproducir el aviso de copyright anterior, esta lista de condiciones y la siguiente exención de responsabilidad en la documentación y/o otros materiales proporcionados con la distribución.
+
+2. Notificación de Uso Comercial
+- Cualquier uso comercial, incluyendo pero no limitado a aplicaciones web, aplicaciones móviles, plataformas SaaS, o software comercial que incorpore este código, requiere notificación por escrito al autor original (Alex Quilis) al menos 30 días antes del despliegue.
+- La notificación debe incluir: descripción del proyecto, uso previsto e información de contacto.
+
+3. Obras Derivadas
+- Cualquier obra derivada sustancial o aplicación construida sobre este código debe reconocer al autor original en una ubicación prominente (ej. página "acerca de", sección de créditos, o documentación).
+- Las obras derivadas comerciales requieren permiso explícito por escrito de Alex Quilis.
+
+4. Participación en Ingresos
+- Las aplicaciones comerciales que generen ingresos superiores a 10.000€ anuales utilizando porciones sustanciales de este código pueden estar sujetas a negociaciones de participación en ingresos con el autor original.
+
+5. No Respaldo
+- Ni el nombre de Alex Quilis ni los nombres de los contribuyentes pueden ser utilizados para respaldar o promocionar productos derivados de este software sin permiso previo específico por escrito.
+
+Información de Contacto
+Para permisos, notificaciones o consultas: alexquilis1@gmail.com
+
+Exención de Responsabilidad
+ESTE SOFTWARE SE PROPORCIONA POR LOS TITULARES DEL COPYRIGHT Y CONTRIBUYENTES "TAL COMO ESTÁ" Y SE RENUNCIA A CUALQUIER GARANTÍA EXPRESA O IMPLÍCITA, INCLUYENDO, PERO NO LIMITADO A, LAS GARANTÍAS IMPLÍCITAS DE COMERCIALIZACIÓN E IDONEIDAD PARA UN PROPÓSITO PARTICULAR. EN NINGÚN CASO EL TITULAR DEL COPYRIGHT O LOS CONTRIBUYENTES SERÁN RESPONSABLES DE CUALQUIER DAÑO DIRECTO, INDIRECTO, INCIDENTAL, ESPECIAL, EJEMPLAR O CONSECUENCIAL (INCLUYENDO, PERO NO LIMITADO A, LA ADQUISICIÓN DE BIENES O SERVICIOS SUSTITUTOS; PÉRDIDA DE USO, DATOS O BENEFICIOS; O INTERRUPCIÓN DEL NEGOCIO) SIN IMPORTAR CÓMO SE CAUSE Y BAJO CUALQUIER TEORÍA DE RESPONSABILIDAD, YA SEA EN CONTRATO, RESPONSABILIDAD ESTRICTA O AGRAVIO (INCLUYENDO NEGLIGENCIA O DE OTRA MANERA) QUE SURJA DE CUALQUIER MANERA DEL USO DE ESTE SOFTWARE, INCLUSO SI SE ADVIERTE DE LA POSIBILIDAD DE TAL DAÑO.
+
+Esta licencia permite el uso educativo y no comercial mientras protege los intereses del autor en aplicaciones comerciales.
