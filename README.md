@@ -33,8 +33,8 @@ BitcoinInsight es un sistema de predicción direccional de Bitcoin que combina m
 ### 1. Clonar y configurar
 
 ```
-git clone https://github.com/alexquilis1/tfg.git
-cd bitcoininsight
+git clone https://github.com/alexquilis1/BitcoinInsight.git
+cd BitcoinInsight
 ```
 
 #### Backend
@@ -158,7 +158,9 @@ El sistema ejecuta automáticamente cada día:
 
 ## 📄 Licencia
 
-MIT License - ver LICENSE para detalles.
+Licencia Personalizada - ver [LICENSE](LICENSE) para detalles.
+
+**Nota:** El uso comercial requiere notificación y puede requerir permiso. Contactar para consultas de licenciamiento comercial.
 
 ## 👨‍💻 Autor
 
